@@ -1,5 +1,10 @@
 # IslandsInterface
 
+Apart from the Elm code this is based on the example from [Functional Web
+Development with Elixir, OTP, and
+Phoenix](https://pragprog.com/book/lhelph/functional-web-development-with-elixir-otp-and-phoenix)
+by Lance Halvorsen.
+
 To start your Phoenix server:
 
   * Install dependencies with `mix deps.get`
