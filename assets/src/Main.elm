@@ -1,7 +1,9 @@
 port module Main exposing (main)
 
 import Browser
-import Element exposing (Color, Element)
+import Browser.Dom
+import Browser.Events
+import Element exposing (Color, Device, DeviceClass(..), Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -10,6 +12,7 @@ import Element.Region as Region
 import Html.Events
 import Json.Decode as Decode
 import Set
+import Task
 import Url.Builder
 
 
@@ -82,19 +85,23 @@ main =
 
 
 type Model
-    = -- HOST ONLY
+    = GettingDevice Flags
+    | -- HOST ONLY
       Lobby
         { host : String
         , name : String
+        , device : Device
         }
     | WaitingForGuest
         { host : String
         , name : String
+        , device : Device
         }
       -- GUEST ONLY
     | JoiningHost
         { hostName : String
         , name : String
+        , device : Device
         }
       -- BOTH
     | PlayersSet
@@ -104,10 +111,12 @@ type Model
         , selection : Selection
         , requestedPlacement : Maybe ( Island, Coordinate )
         , opponentReady : Bool
+        , device : Device
         }
     | WaitingForOpponent
         { player : Player
         , placedIslands : List ( Island, Coordinate )
+        , device : Device
         }
     | Playing PlayingData
 
@@ -119,6 +128,7 @@ type alias PlayingData =
     , opponentGuesses : List Coordinate
     , opponentTiles : List ( Coordinate, Bool )
     , forestedIslands : List Island
+    , device : Device
     }
 
 
@@ -301,21 +311,9 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    if flags.hash == "" then
-        ( Lobby
-            { host = flags.protocol ++ "//" ++ flags.host
-            , name = ""
-            }
-        , Cmd.none
-        )
-
-    else
-        ( JoiningHost
-            { hostName = String.dropLeft 1 flags.hash
-            , name = ""
-            }
-        , Cmd.none
-        )
+    ( GettingDevice flags
+    , Task.perform GotViewport Browser.Dom.getViewport
+    )
 
 
 
@@ -323,7 +321,9 @@ init flags =
 
 
 type Msg
-    = UserChangedName String
+    = GotViewport Browser.Dom.Viewport
+    | ResizedViewport Int Int
+    | UserChangedName String
     | UserPressedCreateGame
     | UserPressedJoinTheGame
     | ReceivedPlayerAdded ()
@@ -342,13 +342,70 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
+        ( GotViewport { viewport }, GettingDevice flags ) ->
+            if flags.hash == "" then
+                ( Lobby
+                    { host = flags.protocol ++ "//" ++ flags.host
+                    , name = ""
+                    , device =
+                        Element.classifyDevice
+                            { width = Basics.round viewport.width
+                            , height = Basics.round viewport.height
+                            }
+                    }
+                , Cmd.none
+                )
+
+            else
+                ( JoiningHost
+                    { hostName = String.dropLeft 1 flags.hash
+                    , name = ""
+                    , device =
+                        Element.classifyDevice
+                            { width = Basics.round viewport.width
+                            , height = Basics.round viewport.height
+                            }
+                    }
+                , Cmd.none
+                )
+
+        ( ResizedViewport width height, GettingDevice flags ) ->
+            if flags.hash == "" then
+                ( Lobby
+                    { host = flags.protocol ++ "//" ++ flags.host
+                    , name = ""
+                    , device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
+                    }
+                , Cmd.none
+                )
+
+            else
+                ( JoiningHost
+                    { hostName = String.dropLeft 1 flags.hash
+                    , name = ""
+                    , device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
+                    }
+                , Cmd.none
+                )
+
+        ( _, GettingDevice _ ) ->
+            ( model, Cmd.none )
+
         -- ONLY HOST
         ( UserChangedName name, Lobby data ) ->
             ( Lobby { data | name = name }
             , Cmd.none
             )
 
-        ( UserPressedCreateGame, Lobby { host, name } ) ->
+        ( UserPressedCreateGame, Lobby { host, name, device } ) ->
             if name == "" then
                 ( model, Cmd.none )
 
@@ -356,14 +413,27 @@ update msg model =
                 ( WaitingForGuest
                     { host = host
                     , name = name
+                    , device = device
                     }
                 , createGame name
                 )
 
+        ( ResizedViewport width height, Lobby data ) ->
+            ( Lobby
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
+                }
+            , Cmd.none
+            )
+
         ( _, Lobby _ ) ->
             ( model, Cmd.none )
 
-        ( ReceivedPlayerAdded _, WaitingForGuest _ ) ->
+        ( ReceivedPlayerAdded _, WaitingForGuest { device } ) ->
             ( PlayersSet
                 { player = Host
                 , placedIslands = []
@@ -371,6 +441,19 @@ update msg model =
                 , selection = None
                 , requestedPlacement = Nothing
                 , opponentReady = False
+                , device = device
+                }
+            , Cmd.none
+            )
+
+        ( ResizedViewport width height, WaitingForGuest data ) ->
+            ( WaitingForGuest
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
                 }
             , Cmd.none
             )
@@ -392,7 +475,7 @@ update msg model =
                 }
             )
 
-        ( ReceivedPlayerAdded _, JoiningHost _ ) ->
+        ( ReceivedPlayerAdded _, JoiningHost { device } ) ->
             ( PlayersSet
                 { player = Guest
                 , placedIslands = []
@@ -400,6 +483,19 @@ update msg model =
                 , selection = None
                 , requestedPlacement = Nothing
                 , opponentReady = False
+                , device = device
+                }
+            , Cmd.none
+            )
+
+        ( ResizedViewport width height, JoiningHost data ) ->
+            ( JoiningHost
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
                 }
             , Cmd.none
             )
@@ -549,6 +645,7 @@ update msg model =
                     , opponentGuesses = []
                     , opponentTiles = []
                     , forestedIslands = []
+                    , device = data.device
                     }
                 , setIslands ()
                 )
@@ -557,9 +654,22 @@ update msg model =
                 ( WaitingForOpponent
                     { player = data.player
                     , placedIslands = data.placedIslands
+                    , device = data.device
                     }
                 , setIslands ()
                 )
+
+        ( ResizedViewport width height, PlayersSet data ) ->
+            ( PlayersSet
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
+                }
+            , Cmd.none
+            )
 
         ( _, PlayersSet _ ) ->
             ( model, Cmd.none )
@@ -581,6 +691,19 @@ update msg model =
                 , opponentGuesses = []
                 , opponentTiles = []
                 , forestedIslands = []
+                , device = data.device
+                }
+            , Cmd.none
+            )
+
+        ( ResizedViewport width height, WaitingForOpponent data ) ->
+            ( WaitingForOpponent
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
                 }
             , Cmd.none
             )
@@ -655,49 +778,67 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        ( ResizedViewport width height, Playing data ) ->
+            ( Playing
+                { data
+                    | device =
+                        Element.classifyDevice
+                            { width = width
+                            , height = height
+                            }
+                }
+            , Cmd.none
+            )
+
         ( _, Playing _ ) ->
             ( model, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model of
-        Lobby _ ->
-            Sub.none
+    Sub.batch
+        [ Browser.Events.onResize ResizedViewport
+        , case model of
+            GettingDevice _ ->
+                Sub.none
 
-        WaitingForGuest _ ->
-            playerAdded ReceivedPlayerAdded
+            Lobby _ ->
+                Sub.none
 
-        JoiningHost _ ->
-            playerAdded ReceivedPlayerAdded
+            WaitingForGuest _ ->
+                playerAdded ReceivedPlayerAdded
 
-        PlayersSet _ ->
-            Sub.batch
-                [ positionedIsland ReceivedPositionedIsland
-                , failedPositioningIsland ReceivedFailedPositioningIsland
-                , opponentSetIslands ReceivedOpponentSetIslands
-                , receivedBoard ReceivedBoard
-                ]
+            JoiningHost _ ->
+                playerAdded ReceivedPlayerAdded
 
-        WaitingForOpponent _ ->
-            opponentSetIslands ReceivedOpponentSetIslands
+            PlayersSet _ ->
+                Sub.batch
+                    [ positionedIsland ReceivedPositionedIsland
+                    , failedPositioningIsland ReceivedFailedPositioningIsland
+                    , opponentSetIslands ReceivedOpponentSetIslands
+                    , receivedBoard ReceivedBoard
+                    ]
 
-        Playing data ->
-            case data.state of
-                Guessed _ ->
-                    Sub.batch
-                        [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
-                        , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
-                        ]
+            WaitingForOpponent _ ->
+                opponentSetIslands ReceivedOpponentSetIslands
 
-                OpponentGuessing ->
-                    Sub.batch
-                        [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
-                        , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
-                        ]
+            Playing data ->
+                case data.state of
+                    Guessed _ ->
+                        Sub.batch
+                            [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
+                            , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
+                            ]
 
-                _ ->
-                    Sub.none
+                    OpponentGuessing ->
+                        Sub.batch
+                            [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
+                            , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
+                            ]
+
+                    _ ->
+                        Sub.none
+        ]
 
 
 
@@ -734,6 +875,9 @@ view model =
             , normal
             ]
             (case model of
+                GettingDevice _ ->
+                    Element.none
+
                 Lobby { name } ->
                     viewLobby name
 
@@ -743,11 +887,11 @@ view model =
                 JoiningHost { hostName, name } ->
                     viewJoiningHost hostName name
 
-                PlayersSet { placedIslands, unplacedIslands, selection, opponentReady } ->
-                    viewPlayersSet placedIslands unplacedIslands selection opponentReady
+                PlayersSet { placedIslands, unplacedIslands, selection, opponentReady, device } ->
+                    viewPlayersSet device placedIslands unplacedIslands selection opponentReady
 
-                WaitingForOpponent { placedIslands } ->
-                    viewWaitingForOpponent placedIslands
+                WaitingForOpponent { placedIslands, device } ->
+                    viewWaitingForOpponent device placedIslands
 
                 Playing data ->
                     viewPlaying data
@@ -760,8 +904,8 @@ viewLobby : String -> Element Msg
 viewLobby name =
     Element.column
         [ Element.centerX
-        , Element.width (Element.px 480)
-        , Element.paddingXY 0 level5
+        , Element.width (Element.fill |> Element.maximum 480)
+        , Element.paddingXY level1 level5
         , Element.spacing level3
         , Region.mainContent
         ]
@@ -819,8 +963,8 @@ viewWaitingForGuest : String -> String -> Element Msg
 viewWaitingForGuest host name =
     Element.column
         [ Element.centerX
-        , Element.width (Element.px 480)
-        , Element.paddingXY 0 level5
+        , Element.width (Element.fill |> Element.maximum 480)
+        , Element.paddingXY level1 level5
         , Element.spacing level3
         , Region.mainContent
         ]
@@ -858,8 +1002,8 @@ viewJoiningHost : String -> String -> Element Msg
 viewJoiningHost hostName name =
     Element.column
         [ Element.centerX
-        , Element.width (Element.px 480)
-        , Element.paddingXY 0 level5
+        , Element.width (Element.fill |> Element.maximum 480)
+        , Element.paddingXY level1 level5
         , Element.spacing level3
         , Region.mainContent
         ]
@@ -917,8 +1061,8 @@ viewJoiningHost hostName name =
         ]
 
 
-viewPlayersSet : List ( Island, Coordinate ) -> List Island -> Selection -> Bool -> Element Msg
-viewPlayersSet placedIslands unplacedIslands selection opponentReady =
+viewPlayersSet : Device -> List ( Island, Coordinate ) -> List Island -> Selection -> Bool -> Element Msg
+viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
     Element.column
         [ Element.centerX
         , Element.paddingXY 0 level3
@@ -937,7 +1081,7 @@ viewPlayersSet placedIslands unplacedIslands selection opponentReady =
                 [ Element.spacing level1
                 , Element.centerX
                 ]
-                (List.map (viewTileRow placedIslands selection) (List.range minRange maxRange))
+                (List.map (viewTileRow device placedIslands selection) (List.range minRange maxRange))
             , if List.isEmpty unplacedIslands then
                 Input.button
                     [ Background.color orange
@@ -954,11 +1098,12 @@ viewPlayersSet placedIslands unplacedIslands selection opponentReady =
                     }
 
               else
-                Element.row
-                    [ Element.spacing level4
+                Element.wrappedRow
+                    [ Element.spacing level2
                     , Element.centerX
+                    , Element.padding level1
                     ]
-                    (List.map (viewIsland selection) unplacedIslands)
+                    (List.map (viewIsland device selection) unplacedIslands)
             , if opponentReady then
                 Element.el
                     [ Element.centerX ]
@@ -970,22 +1115,27 @@ viewPlayersSet placedIslands unplacedIslands selection opponentReady =
         ]
 
 
-viewIsland : Selection -> Island -> Element Msg
-viewIsland selection island =
-    Element.column
-        [ Element.spacing level1 ]
-        (List.map (viewIslandTileRow selection island) (List.range 0 2))
+viewIsland : Device -> Selection -> Island -> Element Msg
+viewIsland device selection island =
+    Element.el
+        [ Element.width Element.fill ]
+        (Element.column
+            [ Element.spacing level1
+            , Element.centerX
+            ]
+            (List.map (viewIslandTileRow device selection island) (List.range 0 2))
+        )
 
 
-viewIslandTileRow : Selection -> Island -> Int -> Element Msg
-viewIslandTileRow selection island row =
+viewIslandTileRow : Device -> Selection -> Island -> Int -> Element Msg
+viewIslandTileRow device selection island row =
     Element.row
         [ Element.spacing level1 ]
-        (List.map (viewIslandTile selection island row) (List.range 0 2))
+        (List.map (viewIslandTile device selection island row) (List.range 0 2))
 
 
-viewIslandTile : Selection -> Island -> Int -> Int -> Element Msg
-viewIslandTile selection island row col =
+viewIslandTile : Device -> Selection -> Island -> Int -> Int -> Element Msg
+viewIslandTile device selection island row col =
     let
         offsetSet =
             offsets island
@@ -1005,12 +1155,8 @@ viewIslandTile selection island row col =
                     False
     in
     if Set.member ( row, col ) offsetSet then
-        Input.button
-            [ Element.width (Element.px level4)
-            , Element.height (Element.px level4)
-            , Background.color brownDark
-            , Border.rounded 3
-            , Element.inFront <|
+        Element.el
+            [ Element.inFront <|
                 if selected then
                     Element.el
                         [ Element.centerX
@@ -1025,27 +1171,28 @@ viewIslandTile selection island row col =
                 else
                     Element.none
             ]
-            { onPress = Just (UserPressedIslandTile island (Coordinate row col))
-            , label = Element.none
-            }
+            (Input.button
+                (tileAttributes device brownDark)
+                { onPress = Just (UserPressedIslandTile island (Coordinate row col))
+                , label = Element.none
+                }
+            )
 
     else
         Element.el
-            [ Element.width (Element.px level4)
-            , Element.height (Element.px level4)
-            ]
+            (tileAttributes device transparent)
             Element.none
 
 
-viewTileRow : List ( Island, Coordinate ) -> Selection -> Int -> Element Msg
-viewTileRow placedIslands selection row =
+viewTileRow : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Element Msg
+viewTileRow device placedIslands selection row =
     Element.row
         [ Element.spacing level1 ]
-        (List.map (viewTile placedIslands selection row) (List.range minRange maxRange))
+        (List.map (viewTile device placedIslands selection row) (List.range minRange maxRange))
 
 
-viewTile : List ( Island, Coordinate ) -> Selection -> Int -> Int -> Element Msg
-viewTile placedIslands selection row col =
+viewTile : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Int -> Element Msg
+viewTile device placedIslands selection row col =
     let
         selected =
             case selection of
@@ -1076,17 +1223,8 @@ viewTile placedIslands selection row col =
                 )
                 placedIslands
     in
-    Input.button
-        [ Element.width (Element.px level4)
-        , Element.height (Element.px level4)
-        , Background.color <|
-            if isIsland then
-                brownDark
-
-            else
-                blueLight
-        , Border.rounded 3
-        , Element.inFront <|
+    Element.el
+        [ Element.inFront <|
             if selected then
                 Element.el
                     [ Element.centerX
@@ -1101,13 +1239,23 @@ viewTile placedIslands selection row col =
             else
                 Element.none
         ]
-        { onPress = Just (UserPressedTile (Coordinate row col))
-        , label = Element.none
-        }
+        (Input.button
+            (tileAttributes device
+                (if isIsland then
+                    brownDark
+
+                 else
+                    blueLight
+                )
+            )
+            { onPress = Just (UserPressedTile (Coordinate row col))
+            , label = Element.none
+            }
+        )
 
 
-viewWaitingForOpponent : List ( Island, Coordinate ) -> Element Msg
-viewWaitingForOpponent placedIslands =
+viewWaitingForOpponent : Device -> List ( Island, Coordinate ) -> Element Msg
+viewWaitingForOpponent device placedIslands =
     Element.column
         [ Element.centerX
         , Element.paddingXY 0 level3
@@ -1126,7 +1274,7 @@ viewWaitingForOpponent placedIslands =
                 [ Element.spacing level1
                 , Element.centerX
                 ]
-                (List.map (viewTileRow placedIslands None) (List.range minRange maxRange))
+                (List.map (viewTileRow device placedIslands None) (List.range minRange maxRange))
             , Element.el
                 [ Element.centerX ]
                 (Element.text "Waiting for other player.")
@@ -1162,17 +1310,18 @@ viewPlaying data =
                         [ Element.spacing level1
                         , Element.centerX
                         ]
-                        (List.map (viewOpponentTileRow data.opponentTiles)
+                        (List.map (viewOpponentTileRow data.device data.opponentTiles)
                             (List.range minRange maxRange)
                         )
-                    , Element.text (forestedInfo data.forestedIslands)
+                    , Element.paragraph []
+                        [ Element.text (forestedInfo data.forestedIslands) ]
                     , case data.state of
                         Guessing ->
-                            Element.el
-                                [ Element.centerX
+                            Element.paragraph
+                                [ Element.width Element.fill
                                 , Font.bold
                                 ]
-                                (Element.text "It's your turn, forest an opponent's tile!")
+                                [ Element.text "It's your turn, forest an opponent's tile!" ]
 
                         _ ->
                             Element.none
@@ -1193,7 +1342,7 @@ viewPlaying data =
                     [ Element.spacing level1
                     , Element.centerX
                     ]
-                    (List.map (viewYourTileRow data.placedIslands data.opponentGuesses)
+                    (List.map (viewYourTileRow data.device data.placedIslands data.opponentGuesses)
                         (List.range minRange maxRange)
                     )
                 , case data.state of
@@ -1228,15 +1377,15 @@ viewPlaying data =
         ]
 
 
-viewOpponentTileRow : List ( Coordinate, Bool ) -> Int -> Element Msg
-viewOpponentTileRow opponentTiles row =
+viewOpponentTileRow : Device -> List ( Coordinate, Bool ) -> Int -> Element Msg
+viewOpponentTileRow device opponentTiles row =
     Element.row
         [ Element.spacing level1 ]
-        (List.map (viewOpponentTile opponentTiles row) (List.range minRange maxRange))
+        (List.map (viewOpponentTile device opponentTiles row) (List.range minRange maxRange))
 
 
-viewOpponentTile : List ( Coordinate, Bool ) -> Int -> Int -> Element Msg
-viewOpponentTile opponentTiles row col =
+viewOpponentTile : Device -> List ( Coordinate, Bool ) -> Int -> Int -> Element Msg
+viewOpponentTile device opponentTiles row col =
     let
         opponentTile ( coordinate, forested ) =
             if Coordinate row col == coordinate then
@@ -1248,45 +1397,51 @@ viewOpponentTile opponentTiles row col =
     case List.head (List.filterMap opponentTile opponentTiles) of
         Nothing ->
             Input.button
-                [ Element.width (Element.px level4)
-                , Element.height (Element.px level4)
-                , Background.color brownLight
-                , Border.rounded 3
-                ]
+                (tileAttributes device brownLight)
                 { onPress = Just (UserPressedOpponentTile (Coordinate row col))
                 , label = Element.none
                 }
 
         Just False ->
             Element.el
-                [ Element.width (Element.px level4)
-                , Element.height (Element.px level4)
-                , Background.color blueDark
-                , Border.rounded 3
-                ]
+                (tileAttributes device blueDark)
                 Element.none
 
         Just True ->
             Element.el
-                [ Element.width (Element.px level4)
-                , Element.height (Element.px level4)
-                , Background.color green
-                , Border.rounded 3
-                ]
+                (tileAttributes device green)
                 Element.none
 
 
-viewYourTileRow : List ( Island, Coordinate ) -> List Coordinate -> Int -> Element Msg
-viewYourTileRow placedIslands opponentGuesses row =
+tileAttributes : Device -> Color -> List (Element.Attribute msg)
+tileAttributes device color =
+    case device.class of
+        Phone ->
+            [ Element.width (Element.px level3)
+            , Element.height (Element.px level3)
+            , Background.color color
+            , Border.rounded 3
+            ]
+
+        _ ->
+            [ Element.width (Element.px level4)
+            , Element.height (Element.px level4)
+            , Background.color color
+            , Border.rounded 3
+            ]
+
+
+viewYourTileRow : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Element Msg
+viewYourTileRow device placedIslands opponentGuesses row =
     Element.row
         [ Element.spacing level1 ]
-        (List.map (viewYourTile placedIslands opponentGuesses row)
+        (List.map (viewYourTile device placedIslands opponentGuesses row)
             (List.range minRange maxRange)
         )
 
 
-viewYourTile : List ( Island, Coordinate ) -> List Coordinate -> Int -> Int -> Element Msg
-viewYourTile placedIslands opponentGuesses row col =
+viewYourTile : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Int -> Element Msg
+viewYourTile device placedIslands opponentGuesses row col =
     let
         isIsland =
             List.any
@@ -1309,23 +1464,21 @@ viewYourTile placedIslands opponentGuesses row col =
             List.any (\coordinate -> coordinate == Coordinate row col) opponentGuesses
     in
     Element.el
-        [ Element.width (Element.px level4)
-        , Element.height (Element.px level4)
-        , Background.color <|
-            if isIsland then
+        (tileAttributes device
+            (if isIsland then
                 if isGuessed then
                     green
 
                 else
                     brownDark
 
-            else if isGuessed then
+             else if isGuessed then
                 blueDark
 
-            else
+             else
                 blueLight
-        , Border.rounded 3
-        ]
+            )
+        )
         Element.none
 
 
@@ -1371,6 +1524,11 @@ white =
 orange : Color
 orange =
     Element.rgb255 243 133 36
+
+
+transparent : Color
+transparent =
+    Element.rgba255 255 255 255 0
 
 
 
