@@ -1,3 +1,18 @@
 /* This file is for your main application css. */
 
-@import "./phoenix.css";
+body {
+  overscroll-behaviour: none;
+}
+
+/* rubik-300 - latin
+ *
+ * Rubik-Light.ttf: Copyright 2015 The Rubik Project Authors (meir@sadan.com)
+ */
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 300;
+  src: local('Rubik Light'), local('Rubik-Light'),
+       url('/fonts/rubik-v9-latin-300.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */
+       url('/fonts/rubik-v9-latin-300.woff') format('woff'); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+}
