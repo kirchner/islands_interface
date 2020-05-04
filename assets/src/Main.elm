@@ -13,6 +13,7 @@ import Html.Events
 import Json.Decode as Decode
 import Set
 import Task
+import Ui.Atom.Button as Button exposing (button)
 import Ui.Theme.Color
 import Ui.Theme.Spacing
 import Url.Builder
@@ -944,19 +945,8 @@ viewLobby name =
                     Input.labelAbove []
                         (Element.text "Pick a name")
                 }
-            , Input.button
-                [ Background.color Ui.Theme.Color.orange
-                , Element.width Element.fill
-                , Border.rounded 6
-                ]
-                { onPress = Just UserPressedCreateGame
-                , label =
-                    Element.el
-                        [ Element.centerX
-                        , Element.padding Ui.Theme.Spacing.level2
-                        ]
-                        (Element.text "Create game")
-                }
+            , button UserPressedCreateGame "Create game"
+                |> Button.toElement
             ]
         ]
 
@@ -1045,20 +1035,9 @@ viewJoiningHost hostName name =
                     Input.labelAbove []
                         (Element.text "Pick a name")
                 }
-            , Input.button
-                [ Background.color Ui.Theme.Color.orange
-                , Element.width Element.fill
-                , Border.rounded 6
-                , Input.focusedOnLoad
-                ]
-                { onPress = Just UserPressedJoinTheGame
-                , label =
-                    Element.el
-                        [ Element.centerX
-                        , Element.padding Ui.Theme.Spacing.level2
-                        ]
-                        (Element.text "Join the game")
-                }
+            , button UserPressedJoinTheGame "Join the game"
+                |> Button.focusedOnLoad
+                |> Button.toElement
             ]
         ]
 
@@ -1085,19 +1064,8 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
                 ]
                 (List.map (viewTileRow device placedIslands selection) (List.range minRange maxRange))
             , if List.isEmpty unplacedIslands then
-                Input.button
-                    [ Background.color Ui.Theme.Color.orange
-                    , Element.width Element.fill
-                    , Border.rounded 6
-                    ]
-                    { onPress = Just UserPressedImReady
-                    , label =
-                        Element.el
-                            [ Element.centerX
-                            , Element.padding Ui.Theme.Spacing.level2
-                            ]
-                            (Element.text "I'm ready!")
-                    }
+                button UserPressedImReady "I'm ready!"
+                    |> Button.toElement
 
               else
                 Element.wrappedRow
