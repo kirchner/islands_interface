@@ -14,6 +14,7 @@ import Json.Decode as Decode
 import Set
 import Task
 import Ui.Theme.Color
+import Ui.Theme.Spacing
 import Url.Builder
 
 
@@ -906,8 +907,8 @@ viewLobby name =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 480)
-        , Element.paddingXY level1 level5
-        , Element.spacing level3
+        , Element.paddingXY Ui.Theme.Spacing.level1 Ui.Theme.Spacing.level5
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.el
@@ -917,7 +918,7 @@ viewLobby name =
             ]
             (Element.text "Welcome to Islands!")
         , Element.column
-            [ Element.spacing level2
+            [ Element.spacing Ui.Theme.Spacing.level2
             , Element.width Element.fill
             ]
             [ Input.text
@@ -952,7 +953,7 @@ viewLobby name =
                 , label =
                     Element.el
                         [ Element.centerX
-                        , Element.padding level2
+                        , Element.padding Ui.Theme.Spacing.level2
                         ]
                         (Element.text "Create game")
                 }
@@ -965,8 +966,8 @@ viewWaitingForGuest host name =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 480)
-        , Element.paddingXY level1 level5
-        , Element.spacing level3
+        , Element.paddingXY Ui.Theme.Spacing.level1 Ui.Theme.Spacing.level5
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.el
@@ -987,7 +988,7 @@ viewWaitingForGuest host name =
             }
         , Element.column
             [ Element.width Element.fill
-            , Element.spacing level1
+            , Element.spacing Ui.Theme.Spacing.level1
             ]
             [ Element.el
                 [ Element.centerX ]
@@ -1004,8 +1005,8 @@ viewJoiningHost hostName name =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 480)
-        , Element.paddingXY level1 level5
-        , Element.spacing level3
+        , Element.paddingXY Ui.Theme.Spacing.level1 Ui.Theme.Spacing.level5
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.el
@@ -1018,7 +1019,7 @@ viewJoiningHost hostName name =
             [ Element.centerX ]
             (Element.text (hostName ++ " is inviting you to play."))
         , Element.column
-            [ Element.spacing level2
+            [ Element.spacing Ui.Theme.Spacing.level2
             , Element.width Element.fill
             ]
             [ Input.text
@@ -1054,7 +1055,7 @@ viewJoiningHost hostName name =
                 , label =
                     Element.el
                         [ Element.centerX
-                        , Element.padding level2
+                        , Element.padding Ui.Theme.Spacing.level2
                         ]
                         (Element.text "Join the game")
                 }
@@ -1066,8 +1067,8 @@ viewPlayersSet : Device -> List ( Island, Coordinate ) -> List Island -> Selecti
 viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
     Element.column
         [ Element.centerX
-        , Element.paddingXY 0 level3
-        , Element.spacing level3
+        , Element.paddingXY 0 Ui.Theme.Spacing.level3
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.el
@@ -1077,9 +1078,9 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
             ]
             (Element.text "Place your Islands!")
         , Element.column
-            [ Element.spacing level3 ]
+            [ Element.spacing Ui.Theme.Spacing.level3 ]
             [ Element.column
-                [ Element.spacing level1
+                [ Element.spacing Ui.Theme.Spacing.level1
                 , Element.centerX
                 ]
                 (List.map (viewTileRow device placedIslands selection) (List.range minRange maxRange))
@@ -1093,16 +1094,16 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
                     , label =
                         Element.el
                             [ Element.centerX
-                            , Element.padding level2
+                            , Element.padding Ui.Theme.Spacing.level2
                             ]
                             (Element.text "I'm ready!")
                     }
 
               else
                 Element.wrappedRow
-                    [ Element.spacing level2
+                    [ Element.spacing Ui.Theme.Spacing.level2
                     , Element.centerX
-                    , Element.padding level1
+                    , Element.padding Ui.Theme.Spacing.level1
                     ]
                     (List.map (viewIsland device selection) unplacedIslands)
             , if opponentReady then
@@ -1121,7 +1122,7 @@ viewIsland device selection island =
     Element.el
         [ Element.width Element.fill ]
         (Element.column
-            [ Element.spacing level1
+            [ Element.spacing Ui.Theme.Spacing.level1
             , Element.centerX
             ]
             (List.map (viewIslandTileRow device selection island) (List.range 0 2))
@@ -1131,7 +1132,7 @@ viewIsland device selection island =
 viewIslandTileRow : Device -> Selection -> Island -> Int -> Element Msg
 viewIslandTileRow device selection island row =
     Element.row
-        [ Element.spacing level1 ]
+        [ Element.spacing Ui.Theme.Spacing.level1 ]
         (List.map (viewIslandTile device selection island row) (List.range 0 2))
 
 
@@ -1162,8 +1163,8 @@ viewIslandTile device selection island row col =
                     Element.el
                         [ Element.centerX
                         , Element.centerY
-                        , Element.width (Element.px level3)
-                        , Element.height (Element.px level3)
+                        , Element.width (Element.px Ui.Theme.Spacing.level3)
+                        , Element.height (Element.px Ui.Theme.Spacing.level3)
                         , Border.rounded 3
                         , Background.color Ui.Theme.Color.orange
                         ]
@@ -1188,7 +1189,7 @@ viewIslandTile device selection island row col =
 viewTileRow : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Element Msg
 viewTileRow device placedIslands selection row =
     Element.row
-        [ Element.spacing level1 ]
+        [ Element.spacing Ui.Theme.Spacing.level1 ]
         (List.map (viewTile device placedIslands selection row) (List.range minRange maxRange))
 
 
@@ -1230,8 +1231,8 @@ viewTile device placedIslands selection row col =
                 Element.el
                     [ Element.centerX
                     , Element.centerY
-                    , Element.width (Element.px level3)
-                    , Element.height (Element.px level3)
+                    , Element.width (Element.px Ui.Theme.Spacing.level3)
+                    , Element.height (Element.px Ui.Theme.Spacing.level3)
                     , Border.rounded 3
                     , Background.color Ui.Theme.Color.orange
                     ]
@@ -1259,8 +1260,8 @@ viewWaitingForOpponent : Device -> List ( Island, Coordinate ) -> Element Msg
 viewWaitingForOpponent device placedIslands =
     Element.column
         [ Element.centerX
-        , Element.paddingXY 0 level3
-        , Element.spacing level3
+        , Element.paddingXY 0 Ui.Theme.Spacing.level3
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.el
@@ -1270,9 +1271,9 @@ viewWaitingForOpponent device placedIslands =
             ]
             (Element.text "Place your Islands!")
         , Element.column
-            [ Element.spacing level3 ]
+            [ Element.spacing Ui.Theme.Spacing.level3 ]
             [ Element.column
-                [ Element.spacing level1
+                [ Element.spacing Ui.Theme.Spacing.level1
                 , Element.centerX
                 ]
                 (List.map (viewTileRow device placedIslands None) (List.range minRange maxRange))
@@ -1287,17 +1288,17 @@ viewPlaying : PlayingData -> Element Msg
 viewPlaying data =
     Element.column
         [ Element.centerX
-        , Element.paddingXY 0 level3
-        , Element.spacing level3
+        , Element.paddingXY 0 Ui.Theme.Spacing.level3
+        , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
         [ Element.wrappedRow
-            [ Element.spacing level5
+            [ Element.spacing Ui.Theme.Spacing.level5
             ]
             [ Element.el
                 [ Element.width Element.fill ]
                 (Element.column
-                    [ Element.spacing level3
+                    [ Element.spacing Ui.Theme.Spacing.level3
                     , Element.centerX
                     , Element.alignTop
                     ]
@@ -1308,7 +1309,7 @@ viewPlaying data =
                         ]
                         (Element.text "Opponent's sea")
                     , Element.column
-                        [ Element.spacing level1
+                        [ Element.spacing Ui.Theme.Spacing.level1
                         , Element.centerX
                         ]
                         (List.map (viewOpponentTileRow data.device data.opponentTiles)
@@ -1329,7 +1330,7 @@ viewPlaying data =
                     ]
                 )
             , Element.column
-                [ Element.spacing level3
+                [ Element.spacing Ui.Theme.Spacing.level3
                 , Element.centerX
                 , Element.alignTop
                 ]
@@ -1340,7 +1341,7 @@ viewPlaying data =
                     ]
                     (Element.text "Your sea")
                 , Element.column
-                    [ Element.spacing level1
+                    [ Element.spacing Ui.Theme.Spacing.level1
                     , Element.centerX
                     ]
                     (List.map (viewYourTileRow data.device data.placedIslands data.opponentGuesses)
@@ -1381,7 +1382,7 @@ viewPlaying data =
 viewOpponentTileRow : Device -> List ( Coordinate, Bool ) -> Int -> Element Msg
 viewOpponentTileRow device opponentTiles row =
     Element.row
-        [ Element.spacing level1 ]
+        [ Element.spacing Ui.Theme.Spacing.level1 ]
         (List.map (viewOpponentTile device opponentTiles row) (List.range minRange maxRange))
 
 
@@ -1418,15 +1419,15 @@ tileAttributes : Device -> Color -> List (Element.Attribute msg)
 tileAttributes device color =
     case device.class of
         Phone ->
-            [ Element.width (Element.px level3)
-            , Element.height (Element.px level3)
+            [ Element.width (Element.px Ui.Theme.Spacing.level3)
+            , Element.height (Element.px Ui.Theme.Spacing.level3)
             , Background.color color
             , Border.rounded 3
             ]
 
         _ ->
-            [ Element.width (Element.px level4)
-            , Element.height (Element.px level4)
+            [ Element.width (Element.px Ui.Theme.Spacing.level4)
+            , Element.height (Element.px Ui.Theme.Spacing.level4)
             , Background.color color
             , Border.rounded 3
             ]
@@ -1435,7 +1436,7 @@ tileAttributes device color =
 viewYourTileRow : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Element Msg
 viewYourTileRow device placedIslands opponentGuesses row =
     Element.row
-        [ Element.spacing level1 ]
+        [ Element.spacing Ui.Theme.Spacing.level1 ]
         (List.map (viewYourTile device placedIslands opponentGuesses row)
             (List.range minRange maxRange)
         )
@@ -1481,35 +1482,6 @@ viewYourTile device placedIslands opponentGuesses row col =
             )
         )
         Element.none
-
-
-
--- SPACING
-
-
-level1 : Int
-level1 =
-    7
-
-
-level2 : Int
-level2 =
-    14
-
-
-level3 : Int
-level3 =
-    28
-
-
-level4 : Int
-level4 =
-    48
-
-
-level5 : Int
-level5 =
-    92
 
 
 
