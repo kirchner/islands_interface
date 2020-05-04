@@ -13,6 +13,7 @@ import Html.Events
 import Json.Decode as Decode
 import Set
 import Task
+import Ui.Theme.Color
 import Url.Builder
 
 
@@ -856,7 +857,7 @@ view model =
                     , backgroundColor = Nothing
                     , shadow =
                         Just
-                            { color = brownLight
+                            { color = Ui.Theme.Color.brownLight
                             , offset = ( 0, 0 )
                             , blur = 1
                             , size = 3
@@ -864,7 +865,7 @@ view model =
                     }
                 ]
             }
-            [ Background.color background
+            [ Background.color Ui.Theme.Color.background
             , Element.scrollbarY
             , Element.width Element.fill
             , Element.height Element.fill
@@ -943,7 +944,7 @@ viewLobby name =
                         (Element.text "Pick a name")
                 }
             , Input.button
-                [ Background.color orange
+                [ Background.color Ui.Theme.Color.orange
                 , Element.width Element.fill
                 , Border.rounded 6
                 ]
@@ -976,7 +977,7 @@ viewWaitingForGuest host name =
             (Element.text ("Hi " ++ name ++ "!"))
         , Element.newTabLink
             [ Element.centerX
-            , Font.color orange
+            , Font.color Ui.Theme.Color.orange
             , Font.underline
             ]
             { url =
@@ -1044,7 +1045,7 @@ viewJoiningHost hostName name =
                         (Element.text "Pick a name")
                 }
             , Input.button
-                [ Background.color orange
+                [ Background.color Ui.Theme.Color.orange
                 , Element.width Element.fill
                 , Border.rounded 6
                 , Input.focusedOnLoad
@@ -1084,7 +1085,7 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
                 (List.map (viewTileRow device placedIslands selection) (List.range minRange maxRange))
             , if List.isEmpty unplacedIslands then
                 Input.button
-                    [ Background.color orange
+                    [ Background.color Ui.Theme.Color.orange
                     , Element.width Element.fill
                     , Border.rounded 6
                     ]
@@ -1164,7 +1165,7 @@ viewIslandTile device selection island row col =
                         , Element.width (Element.px level3)
                         , Element.height (Element.px level3)
                         , Border.rounded 3
-                        , Background.color orange
+                        , Background.color Ui.Theme.Color.orange
                         ]
                         Element.none
 
@@ -1172,7 +1173,7 @@ viewIslandTile device selection island row col =
                     Element.none
             ]
             (Input.button
-                (tileAttributes device brownDark)
+                (tileAttributes device Ui.Theme.Color.brownDark)
                 { onPress = Just (UserPressedIslandTile island (Coordinate row col))
                 , label = Element.none
                 }
@@ -1180,7 +1181,7 @@ viewIslandTile device selection island row col =
 
     else
         Element.el
-            (tileAttributes device transparent)
+            (tileAttributes device Ui.Theme.Color.transparent)
             Element.none
 
 
@@ -1232,7 +1233,7 @@ viewTile device placedIslands selection row col =
                     , Element.width (Element.px level3)
                     , Element.height (Element.px level3)
                     , Border.rounded 3
-                    , Background.color orange
+                    , Background.color Ui.Theme.Color.orange
                     ]
                     Element.none
 
@@ -1242,10 +1243,10 @@ viewTile device placedIslands selection row col =
         (Input.button
             (tileAttributes device
                 (if isIsland then
-                    brownDark
+                    Ui.Theme.Color.brownDark
 
                  else
-                    blueLight
+                    Ui.Theme.Color.blueLight
                 )
             )
             { onPress = Just (UserPressedTile (Coordinate row col))
@@ -1397,19 +1398,19 @@ viewOpponentTile device opponentTiles row col =
     case List.head (List.filterMap opponentTile opponentTiles) of
         Nothing ->
             Input.button
-                (tileAttributes device brownLight)
+                (tileAttributes device Ui.Theme.Color.brownLight)
                 { onPress = Just (UserPressedOpponentTile (Coordinate row col))
                 , label = Element.none
                 }
 
         Just False ->
             Element.el
-                (tileAttributes device blueDark)
+                (tileAttributes device Ui.Theme.Color.blueDark)
                 Element.none
 
         Just True ->
             Element.el
-                (tileAttributes device green)
+                (tileAttributes device Ui.Theme.Color.green)
                 Element.none
 
 
@@ -1467,68 +1468,19 @@ viewYourTile device placedIslands opponentGuesses row col =
         (tileAttributes device
             (if isIsland then
                 if isGuessed then
-                    green
+                    Ui.Theme.Color.green
 
                 else
-                    brownDark
+                    Ui.Theme.Color.brownDark
 
              else if isGuessed then
-                blueDark
+                Ui.Theme.Color.blueDark
 
              else
-                blueLight
+                Ui.Theme.Color.blueLight
             )
         )
         Element.none
-
-
-
--- COLORS
-
-
-background : Color
-background =
-    Element.rgb255 236 227 212
-
-
-green : Color
-green =
-    Element.rgb255 86 116 66
-
-
-brownDark : Color
-brownDark =
-    Element.rgb255 71 53 53
-
-
-brownLight : Color
-brownLight =
-    Element.rgb255 135 108 87
-
-
-blueLight : Color
-blueLight =
-    Element.rgb255 130 193 237
-
-
-blueDark : Color
-blueDark =
-    Element.rgb255 80 150 235
-
-
-white : Color
-white =
-    Element.rgb255 255 255 255
-
-
-orange : Color
-orange =
-    Element.rgb255 243 133 36
-
-
-transparent : Color
-transparent =
-    Element.rgba255 255 255 255 0
 
 
 
