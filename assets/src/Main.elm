@@ -998,11 +998,7 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
         [ Ui.Theme.Typography.heading "Place your Islands!"
         , Element.column
             [ Element.spacing Ui.Theme.Spacing.level3 ]
-            [ Element.column
-                [ Element.spacing Ui.Theme.Spacing.level1
-                , Element.centerX
-                ]
-                (List.map (viewTileRow device placedIslands selection) (List.range minRange maxRange))
+            [ viewField device (viewSetupTile placedIslands selection)
             , if List.isEmpty unplacedIslands then
                 button UserPressedImReady "I'm ready!"
                     |> Button.toElement
@@ -1023,6 +1019,103 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
                 Element.none
             ]
         ]
+
+
+viewWaitingForOpponent : Device -> List ( Island, Coordinate ) -> Element Msg
+viewWaitingForOpponent device placedIslands =
+    Element.column
+        [ Element.centerX
+        , Element.paddingXY 0 Ui.Theme.Spacing.level3
+        , Element.spacing Ui.Theme.Spacing.level3
+        , Region.mainContent
+        ]
+        [ Ui.Theme.Typography.heading "Place your Islands!"
+        , Element.column
+            [ Element.spacing Ui.Theme.Spacing.level3 ]
+            [ viewField device (viewSetupTile placedIslands None)
+            , Element.el
+                [ Element.centerX ]
+                (Element.text "Waiting for other player.")
+            ]
+        ]
+
+
+viewPlaying : PlayingData -> Element Msg
+viewPlaying data =
+    Element.column
+        [ Element.centerX
+        , Element.paddingXY 0 Ui.Theme.Spacing.level3
+        , Element.spacing Ui.Theme.Spacing.level3
+        , Region.mainContent
+        ]
+        [ Element.wrappedRow
+            [ Element.spacing Ui.Theme.Spacing.level5
+            ]
+            [ Element.el
+                [ Element.width Element.fill ]
+                (Element.column
+                    [ Element.spacing Ui.Theme.Spacing.level3
+                    , Element.centerX
+                    , Element.alignTop
+                    ]
+                    [ Ui.Theme.Typography.heading "Opponent's sea"
+                    , viewField data.device
+                        (viewOpponentTile data.opponentTiles)
+                    , Element.paragraph []
+                        [ Element.text (forestedInfo data.forestedIslands) ]
+                    , case data.state of
+                        Guessing ->
+                            Element.paragraph
+                                [ Element.width Element.fill
+                                , Font.bold
+                                ]
+                                [ Element.text "It's your turn, forest an opponent's tile!" ]
+
+                        _ ->
+                            Element.none
+                    ]
+                )
+            , Element.column
+                [ Element.spacing Ui.Theme.Spacing.level3
+                , Element.centerX
+                , Element.alignTop
+                ]
+                [ Ui.Theme.Typography.heading "Your sea"
+                , viewField data.device (viewYourTile data.placedIslands data.opponentGuesses)
+                , case data.state of
+                    OpponentGuessing ->
+                        Element.el
+                            [ Element.centerX
+                            , Font.bold
+                            ]
+                            (Element.text "The other player is foresting now.")
+
+                    _ ->
+                        Element.none
+                ]
+            ]
+        , case data.state of
+            Won ->
+                Element.el
+                    [ Element.centerX
+                    , Font.bold
+                    ]
+                    (Element.text "Congratulations! You have won the game!")
+
+            OpponentWon ->
+                Element.el
+                    [ Element.centerX
+                    , Font.bold
+                    ]
+                    (Element.text "Sorry, the other player has forested all your islands and wins the game.")
+
+            _ ->
+                Element.none
+        ]
+
+
+
+-- VIEW ISLAND
 
 
 viewIsland : Device -> Selection -> Island -> Element Msg
@@ -1088,15 +1181,12 @@ viewIslandTile device selection island row col =
             |> Tile.toElement
 
 
-viewTileRow : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Element Msg
-viewTileRow device placedIslands selection row =
-    Element.row
-        [ Element.spacing Ui.Theme.Spacing.level1 ]
-        (List.map (viewTile device placedIslands selection row) (List.range minRange maxRange))
+
+-- VIEW TILE
 
 
-viewTile : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Int -> Element Msg
-viewTile device placedIslands selection row col =
+viewSetupTile : List ( Island, Coordinate ) -> Selection -> Device -> Int -> Int -> Element Msg
+viewSetupTile placedIslands selection device row col =
     let
         selected =
             case selection of
@@ -1106,29 +1196,23 @@ viewTile device placedIslands selection row col =
                 _ ->
                     False
 
-        isIsland =
-            List.any
-                (\( island, islandCoordinate ) ->
-                    Set.member
-                        ( row, col )
-                        (offsets island
-                            |> List.map
-                                (\coordinate ->
-                                    ( islandCoordinate.row + coordinate.row
-                                    , islandCoordinate.col + coordinate.col
-                                    )
-                                )
-                            |> Set.fromList
-                        )
-                )
-                placedIslands
-
         role =
-            if isIsland then
+            if List.any containsTile placedIslands then
                 Tile.Island
 
             else
                 Tile.Water
+
+        containsTile ( island, islandCoordinate ) =
+            offsets island
+                |> List.map
+                    (\coordinate ->
+                        ( islandCoordinate.row + coordinate.row
+                        , islandCoordinate.col + coordinate.col
+                        )
+                    )
+                |> Set.fromList
+                |> Set.member ( row, col )
     in
     Element.el
         [ Element.inFront <|
@@ -1153,123 +1237,8 @@ viewTile device placedIslands selection row col =
         )
 
 
-viewWaitingForOpponent : Device -> List ( Island, Coordinate ) -> Element Msg
-viewWaitingForOpponent device placedIslands =
-    Element.column
-        [ Element.centerX
-        , Element.paddingXY 0 Ui.Theme.Spacing.level3
-        , Element.spacing Ui.Theme.Spacing.level3
-        , Region.mainContent
-        ]
-        [ Ui.Theme.Typography.heading "Place your Islands!"
-        , Element.column
-            [ Element.spacing Ui.Theme.Spacing.level3 ]
-            [ Element.column
-                [ Element.spacing Ui.Theme.Spacing.level1
-                , Element.centerX
-                ]
-                (List.map (viewTileRow device placedIslands None) (List.range minRange maxRange))
-            , Element.el
-                [ Element.centerX ]
-                (Element.text "Waiting for other player.")
-            ]
-        ]
-
-
-viewPlaying : PlayingData -> Element Msg
-viewPlaying data =
-    Element.column
-        [ Element.centerX
-        , Element.paddingXY 0 Ui.Theme.Spacing.level3
-        , Element.spacing Ui.Theme.Spacing.level3
-        , Region.mainContent
-        ]
-        [ Element.wrappedRow
-            [ Element.spacing Ui.Theme.Spacing.level5
-            ]
-            [ Element.el
-                [ Element.width Element.fill ]
-                (Element.column
-                    [ Element.spacing Ui.Theme.Spacing.level3
-                    , Element.centerX
-                    , Element.alignTop
-                    ]
-                    [ Ui.Theme.Typography.heading "Opponent's sea"
-                    , Element.column
-                        [ Element.spacing Ui.Theme.Spacing.level1
-                        , Element.centerX
-                        ]
-                        (List.map (viewOpponentTileRow data.device data.opponentTiles)
-                            (List.range minRange maxRange)
-                        )
-                    , Element.paragraph []
-                        [ Element.text (forestedInfo data.forestedIslands) ]
-                    , case data.state of
-                        Guessing ->
-                            Element.paragraph
-                                [ Element.width Element.fill
-                                , Font.bold
-                                ]
-                                [ Element.text "It's your turn, forest an opponent's tile!" ]
-
-                        _ ->
-                            Element.none
-                    ]
-                )
-            , Element.column
-                [ Element.spacing Ui.Theme.Spacing.level3
-                , Element.centerX
-                , Element.alignTop
-                ]
-                [ Ui.Theme.Typography.heading "Your sea"
-                , Element.column
-                    [ Element.spacing Ui.Theme.Spacing.level1
-                    , Element.centerX
-                    ]
-                    (List.map (viewYourTileRow data.device data.placedIslands data.opponentGuesses)
-                        (List.range minRange maxRange)
-                    )
-                , case data.state of
-                    OpponentGuessing ->
-                        Element.el
-                            [ Element.centerX
-                            , Font.bold
-                            ]
-                            (Element.text "The other player is foresting now.")
-
-                    _ ->
-                        Element.none
-                ]
-            ]
-        , case data.state of
-            Won ->
-                Element.el
-                    [ Element.centerX
-                    , Font.bold
-                    ]
-                    (Element.text "Congratulations! You have won the game!")
-
-            OpponentWon ->
-                Element.el
-                    [ Element.centerX
-                    , Font.bold
-                    ]
-                    (Element.text "Sorry, the other player has forested all your islands and wins the game.")
-
-            _ ->
-                Element.none
-        ]
-
-
-viewOpponentTileRow : Device -> List ( Coordinate, Bool ) -> Int -> Element Msg
-viewOpponentTileRow device opponentTiles row =
-    Element.row
-        [ Element.spacing Ui.Theme.Spacing.level1 ]
-        (List.map (viewOpponentTile device opponentTiles row) (List.range minRange maxRange))
-
-
-viewOpponentTile : Device -> List ( Coordinate, Bool ) -> Int -> Int -> Element Msg
-viewOpponentTile device opponentTiles row col =
+viewOpponentTile : List ( Coordinate, Bool ) -> Device -> Int -> Int -> Element Msg
+viewOpponentTile opponentTiles device row col =
     let
         opponentTile ( coordinate, forested ) =
             if Coordinate row col == coordinate then
@@ -1296,40 +1265,17 @@ viewOpponentTile device opponentTiles row col =
                 |> Tile.toElement
 
 
-viewYourTileRow : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Element Msg
-viewYourTileRow device placedIslands opponentGuesses row =
-    Element.row
-        [ Element.spacing Ui.Theme.Spacing.level1 ]
-        (List.map (viewYourTile device placedIslands opponentGuesses row)
-            (List.range minRange maxRange)
-        )
-
-
-viewYourTile : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Int -> Element Msg
-viewYourTile device placedIslands opponentGuesses row col =
+viewYourTile :
+    List ( Island, Coordinate )
+    -> List Coordinate
+    -> Device
+    -> Int
+    -> Int
+    -> Element Msg
+viewYourTile placedIslands opponentGuesses device row col =
     let
-        isIsland =
-            List.any
-                (\( island, islandCoordinate ) ->
-                    Set.member
-                        ( row, col )
-                        (offsets island
-                            |> List.map
-                                (\coordinate ->
-                                    ( islandCoordinate.row + coordinate.row
-                                    , islandCoordinate.col + coordinate.col
-                                    )
-                                )
-                            |> Set.fromList
-                        )
-                )
-                placedIslands
-
-        isGuessed =
-            List.any (\coordinate -> coordinate == Coordinate row col) opponentGuesses
-
         role =
-            if isIsland then
+            if List.any containsTile placedIslands then
                 if isGuessed then
                     Tile.Forest
 
@@ -1341,7 +1287,40 @@ viewYourTile device placedIslands opponentGuesses row col =
 
             else
                 Tile.Water
+
+        containsTile ( island, islandCoordinate ) =
+            offsets island
+                |> List.map
+                    (\coordinate ->
+                        ( islandCoordinate.row + coordinate.row
+                        , islandCoordinate.col + coordinate.col
+                        )
+                    )
+                |> Set.fromList
+                |> Set.member ( row, col )
+
+        isGuessed =
+            List.any (\coordinate -> coordinate == Coordinate row col) opponentGuesses
     in
     tile device
         |> Tile.withRole role
         |> Tile.toElement
+
+
+
+-- VIEW FIELD
+
+
+viewField : Device -> (Device -> Int -> Int -> Element msg) -> Element msg
+viewField device viewTile =
+    let
+        viewRow row =
+            Element.row
+                [ Element.spacing Ui.Theme.Spacing.level1 ]
+                (List.map (viewTile device row) (List.range minRange maxRange))
+    in
+    Element.column
+        [ Element.spacing Ui.Theme.Spacing.level1
+        , Element.centerX
+        ]
+        (List.map viewRow (List.range minRange maxRange))
