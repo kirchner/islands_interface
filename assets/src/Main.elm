@@ -3,17 +3,15 @@ port module Main exposing (main)
 import Browser
 import Browser.Dom
 import Browser.Events
-import Element exposing (Color, Device, DeviceClass(..), Element)
+import Element exposing (Device, DeviceClass(..), Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Element.Input as Input
 import Element.Region as Region
-import Html.Events
-import Json.Decode as Decode
 import Set
 import Task
 import Ui.Atom.Button as Button exposing (button)
+import Ui.Atom.InputText as InputText exposing (inputText)
 import Ui.Atom.Tile as Tile exposing (tile)
 import Ui.Theme.Color
 import Ui.Theme.Spacing
@@ -919,29 +917,9 @@ viewLobby name =
             [ Element.spacing Ui.Theme.Spacing.level2
             , Element.width Element.fill
             ]
-            [ Input.text
-                [ Input.focusedOnLoad
-                , Element.htmlAttribute <|
-                    Html.Events.on "keypress"
-                        (Decode.field "key" Decode.string
-                            |> Decode.andThen
-                                (\rawKey ->
-                                    case rawKey of
-                                        "Enter" ->
-                                            Decode.succeed UserPressedCreateGame
-
-                                        _ ->
-                                            Decode.fail "not handling that key here"
-                                )
-                        )
-                ]
-                { onChange = UserChangedName
-                , text = name
-                , placeholder = Nothing
-                , label =
-                    Input.labelAbove []
-                        (Element.text "Pick a name")
-                }
+            [ inputText UserChangedName UserPressedCreateGame "Pick a name" name
+                |> InputText.focusedOnLoad
+                |> InputText.toElement
             , button UserPressedCreateGame "Create game"
                 |> Button.toElement
             ]
@@ -999,29 +977,9 @@ viewJoiningHost hostName name =
             [ Element.spacing Ui.Theme.Spacing.level2
             , Element.width Element.fill
             ]
-            [ Input.text
-                [ Input.focusedOnLoad
-                , Element.htmlAttribute <|
-                    Html.Events.on "keypress"
-                        (Decode.field "key" Decode.string
-                            |> Decode.andThen
-                                (\rawKey ->
-                                    case rawKey of
-                                        "Enter" ->
-                                            Decode.succeed UserPressedJoinTheGame
-
-                                        _ ->
-                                            Decode.fail "not handling that key here"
-                                )
-                        )
-                ]
-                { onChange = UserChangedName
-                , text = name
-                , placeholder = Nothing
-                , label =
-                    Input.labelAbove []
-                        (Element.text "Pick a name")
-                }
+            [ inputText UserChangedName UserPressedJoinTheGame "Pick a name" name
+                |> InputText.focusedOnLoad
+                |> InputText.toElement
             , button UserPressedJoinTheGame "Join the game"
                 |> Button.focusedOnLoad
                 |> Button.toElement
