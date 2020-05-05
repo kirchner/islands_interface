@@ -14,6 +14,7 @@ import Json.Decode as Decode
 import Set
 import Task
 import Ui.Atom.Button as Button exposing (button)
+import Ui.Atom.Tile as Tile exposing (tile)
 import Ui.Theme.Color
 import Ui.Theme.Spacing
 import Url.Builder
@@ -1141,17 +1142,15 @@ viewIslandTile device selection island row col =
                 else
                     Element.none
             ]
-            (Input.button
-                (tileAttributes device Ui.Theme.Color.brownDark)
-                { onPress = Just (UserPressedIslandTile island (Coordinate row col))
-                , label = Element.none
-                }
+            (tile device
+                |> Tile.withRole Tile.Island
+                |> Tile.enabledWith (UserPressedIslandTile island (Coordinate row col))
+                |> Tile.toElement
             )
 
     else
-        Element.el
-            (tileAttributes device Ui.Theme.Color.transparent)
-            Element.none
+        tile device
+            |> Tile.toElement
 
 
 viewTileRow : Device -> List ( Island, Coordinate ) -> Selection -> Int -> Element Msg
@@ -1192,6 +1191,13 @@ viewTile device placedIslands selection row col =
                         )
                 )
                 placedIslands
+
+        role =
+            if isIsland then
+                Tile.Island
+
+            else
+                Tile.Water
     in
     Element.el
         [ Element.inFront <|
@@ -1209,18 +1215,10 @@ viewTile device placedIslands selection row col =
             else
                 Element.none
         ]
-        (Input.button
-            (tileAttributes device
-                (if isIsland then
-                    Ui.Theme.Color.brownDark
-
-                 else
-                    Ui.Theme.Color.blueLight
-                )
-            )
-            { onPress = Just (UserPressedTile (Coordinate row col))
-            , label = Element.none
-            }
+        (tile device
+            |> Tile.withRole role
+            |> Tile.enabledWith (UserPressedTile (Coordinate row col))
+            |> Tile.toElement
         )
 
 
@@ -1366,39 +1364,20 @@ viewOpponentTile device opponentTiles row col =
     in
     case List.head (List.filterMap opponentTile opponentTiles) of
         Nothing ->
-            Input.button
-                (tileAttributes device Ui.Theme.Color.brownLight)
-                { onPress = Just (UserPressedOpponentTile (Coordinate row col))
-                , label = Element.none
-                }
+            tile device
+                |> Tile.withRole Tile.Unknown
+                |> Tile.enabledWith (UserPressedOpponentTile (Coordinate row col))
+                |> Tile.toElement
 
         Just False ->
-            Element.el
-                (tileAttributes device Ui.Theme.Color.blueDark)
-                Element.none
+            tile device
+                |> Tile.withRole Tile.DiscoveredWater
+                |> Tile.toElement
 
         Just True ->
-            Element.el
-                (tileAttributes device Ui.Theme.Color.green)
-                Element.none
-
-
-tileAttributes : Device -> Color -> List (Element.Attribute msg)
-tileAttributes device color =
-    case device.class of
-        Phone ->
-            [ Element.width (Element.px Ui.Theme.Spacing.level3)
-            , Element.height (Element.px Ui.Theme.Spacing.level3)
-            , Background.color color
-            , Border.rounded 3
-            ]
-
-        _ ->
-            [ Element.width (Element.px Ui.Theme.Spacing.level4)
-            , Element.height (Element.px Ui.Theme.Spacing.level4)
-            , Background.color color
-            , Border.rounded 3
-            ]
+            tile device
+                |> Tile.withRole Tile.Forest
+                |> Tile.toElement
 
 
 viewYourTileRow : Device -> List ( Island, Coordinate ) -> List Coordinate -> Int -> Element Msg
@@ -1432,24 +1411,24 @@ viewYourTile device placedIslands opponentGuesses row col =
 
         isGuessed =
             List.any (\coordinate -> coordinate == Coordinate row col) opponentGuesses
-    in
-    Element.el
-        (tileAttributes device
-            (if isIsland then
+
+        role =
+            if isIsland then
                 if isGuessed then
-                    Ui.Theme.Color.green
+                    Tile.Forest
 
                 else
-                    Ui.Theme.Color.brownDark
+                    Tile.Island
 
-             else if isGuessed then
-                Ui.Theme.Color.blueDark
+            else if isGuessed then
+                Tile.DiscoveredWater
 
-             else
-                Ui.Theme.Color.blueLight
-            )
-        )
-        Element.none
+            else
+                Tile.Water
+    in
+    tile device
+        |> Tile.withRole role
+        |> Tile.toElement
 
 
 
