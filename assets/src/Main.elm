@@ -17,6 +17,7 @@ import Ui.Atom.Button as Button exposing (button)
 import Ui.Atom.Tile as Tile exposing (tile)
 import Ui.Theme.Color
 import Ui.Theme.Spacing
+import Ui.Theme.Typography
 import Url.Builder
 
 
@@ -876,7 +877,7 @@ view model =
                 [ Font.typeface "Rubik"
                 , Font.sansSerif
                 ]
-            , normal
+            , Font.size 24
             ]
             (case model of
                 GettingDevice _ ->
@@ -913,12 +914,7 @@ viewLobby name =
         , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
-        [ Element.el
-            [ Region.heading 1
-            , Element.centerX
-            , large
-            ]
-            (Element.text "Welcome to Islands!")
+        [ Ui.Theme.Typography.heading "Welcome to Islands!"
         , Element.column
             [ Element.spacing Ui.Theme.Spacing.level2
             , Element.width Element.fill
@@ -961,12 +957,7 @@ viewWaitingForGuest host name =
         , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
-        [ Element.el
-            [ Region.heading 1
-            , Element.centerX
-            , large
-            ]
-            (Element.text ("Hi " ++ name ++ "!"))
+        [ Ui.Theme.Typography.heading ("Hi " ++ name ++ "!")
         , Element.newTabLink
             [ Element.centerX
             , Font.color Ui.Theme.Color.orange
@@ -1000,12 +991,7 @@ viewJoiningHost hostName name =
         , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
-        [ Element.el
-            [ Region.heading 1
-            , Element.centerX
-            , large
-            ]
-            (Element.text "Welcome to Island!")
+        [ Ui.Theme.Typography.heading "Welcome to Island!"
         , Element.el
             [ Element.centerX ]
             (Element.text (hostName ++ " is inviting you to play."))
@@ -1051,12 +1037,7 @@ viewPlayersSet device placedIslands unplacedIslands selection opponentReady =
         , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
-        [ Element.el
-            [ Region.heading 1
-            , Element.centerX
-            , large
-            ]
-            (Element.text "Place your Islands!")
+        [ Ui.Theme.Typography.heading "Place your Islands!"
         , Element.column
             [ Element.spacing Ui.Theme.Spacing.level3 ]
             [ Element.column
@@ -1222,12 +1203,7 @@ viewWaitingForOpponent device placedIslands =
         , Element.spacing Ui.Theme.Spacing.level3
         , Region.mainContent
         ]
-        [ Element.el
-            [ Region.heading 1
-            , Element.centerX
-            , large
-            ]
-            (Element.text "Place your Islands!")
+        [ Ui.Theme.Typography.heading "Place your Islands!"
         , Element.column
             [ Element.spacing Ui.Theme.Spacing.level3 ]
             [ Element.column
@@ -1260,12 +1236,7 @@ viewPlaying data =
                     , Element.centerX
                     , Element.alignTop
                     ]
-                    [ Element.el
-                        [ Region.heading 1
-                        , Element.centerX
-                        , large
-                        ]
-                        (Element.text "Opponent's sea")
+                    [ Ui.Theme.Typography.heading "Opponent's sea"
                     , Element.column
                         [ Element.spacing Ui.Theme.Spacing.level1
                         , Element.centerX
@@ -1292,12 +1263,7 @@ viewPlaying data =
                 , Element.centerX
                 , Element.alignTop
                 ]
-                [ Element.el
-                    [ Region.heading 1
-                    , Element.centerX
-                    , large
-                    ]
-                    (Element.text "Your sea")
+                [ Ui.Theme.Typography.heading "Your sea"
                 , Element.column
                     [ Element.spacing Ui.Theme.Spacing.level1
                     , Element.centerX
@@ -1421,17 +1387,3 @@ viewYourTile device placedIslands opponentGuesses row col =
     tile device
         |> Tile.withRole role
         |> Tile.toElement
-
-
-
--- FONT SIZES
-
-
-large : Element.Attribute msg
-large =
-    Font.size 36
-
-
-normal : Element.Attribute msg
-normal =
-    Font.size 24
