@@ -1116,11 +1116,7 @@ viewIslandTile device selection island row col =
         selected =
             case selection of
                 Island selectedIsland selectedOffset ->
-                    if selectedIsland == island && selectedOffset == Coordinate row col then
-                        True
-
-                    else
-                        False
+                    selectedIsland == island && selectedOffset == Coordinate row col
 
                 _ ->
                     False
@@ -1166,11 +1162,7 @@ viewTile device placedIslands selection row col =
         selected =
             case selection of
                 Tile coordinate ->
-                    if coordinate == Coordinate row col then
-                        True
-
-                    else
-                        False
+                    coordinate == Coordinate row col
 
                 _ ->
                     False
