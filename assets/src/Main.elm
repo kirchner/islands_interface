@@ -589,23 +589,7 @@ update msg model =
 
         ( UserPressedImReady, PlayersSet data ) ->
             if data.opponentReady then
-                ( { model
-                    | page =
-                        Playing
-                            { player = data.player
-                            , state =
-                                case data.player of
-                                    Host ->
-                                        Guessing
-
-                                    Guest ->
-                                        OpponentGuessing
-                            , placedIslands = data.placedIslands
-                            , opponentGuesses = []
-                            , opponentTiles = []
-                            , forestedIslands = []
-                            }
-                  }
+                ( { model | page = Playing (initPlaying data.player data.placedIslands) }
                 , setIslands ()
                 )
 
@@ -627,23 +611,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( ReceivedOpponentSetIslands (), WaitingForOpponent data ) ->
-            ( { model
-                | page =
-                    Playing
-                        { player = data.player
-                        , state =
-                            case data.player of
-                                Host ->
-                                    Guessing
-
-                                Guest ->
-                                    OpponentGuessing
-                        , placedIslands = data.placedIslands
-                        , opponentGuesses = []
-                        , opponentTiles = []
-                        , forestedIslands = []
-                        }
-              }
+            ( { model | page = Playing (initPlaying data.player data.placedIslands) }
             , Cmd.none
             )
 
@@ -651,10 +619,40 @@ update msg model =
             ( model, Cmd.none )
 
         -- PLAYING
-        ( UserPressedOpponentTile coordinate, Playing data ) ->
+        ( _, Playing data ) ->
+            let
+                ( newData, cmd ) =
+                    updatePlaying msg data
+            in
+            ( { model | page = Playing newData }
+            , cmd
+            )
+
+
+initPlaying : Player -> List ( Island, Coordinate ) -> PlayingData
+initPlaying player placedIslands =
+    { player = player
+    , state =
+        case player of
+            Host ->
+                Guessing
+
+            Guest ->
+                OpponentGuessing
+    , placedIslands = placedIslands
+    , opponentGuesses = []
+    , opponentTiles = []
+    , forestedIslands = []
+    }
+
+
+updatePlaying : Msg -> PlayingData -> ( PlayingData, Cmd Msg )
+updatePlaying msg data =
+    case msg of
+        UserPressedOpponentTile coordinate ->
             case data.state of
                 Guessing ->
-                    ( { model | page = Playing { data | state = Guessed coordinate } }
+                    ( { data | state = Guessed coordinate }
                     , guessCoordinate
                         { player = playerToString data.player
                         , row = coordinate.row
@@ -663,68 +661,60 @@ update msg model =
                     )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( data, Cmd.none )
 
-        ( ReceivedFailedGuessingCoordinate (), Playing data ) ->
-            ( model, Cmd.none )
+        ReceivedFailedGuessingCoordinate () ->
+            ( data, Cmd.none )
 
-        ( ReceivedPlayerGuessedCoordinate { player, row, col, result }, Playing data ) ->
+        ReceivedPlayerGuessedCoordinate { player, row, col, result } ->
             case ( data.state, playerFromString player ) of
                 ( Guessed coordinate, Just guessingPlayer ) ->
                     if guessingPlayer == data.player && Coordinate row col == coordinate then
-                        ( { model
-                            | page =
-                                Playing
-                                    { data
-                                        | state =
-                                            if result.win == "win" then
-                                                Won
+                        ( { data
+                            | state =
+                                if result.win == "win" then
+                                    Won
 
-                                            else
-                                                OpponentGuessing
-                                        , opponentTiles =
-                                            ( coordinate, result.hit ) :: data.opponentTiles
-                                        , forestedIslands =
-                                            case islandFromString result.island of
-                                                Nothing ->
-                                                    data.forestedIslands
+                                else
+                                    OpponentGuessing
+                            , opponentTiles =
+                                ( coordinate, result.hit ) :: data.opponentTiles
+                            , forestedIslands =
+                                case islandFromString result.island of
+                                    Nothing ->
+                                        data.forestedIslands
 
-                                                Just island ->
-                                                    island :: data.forestedIslands
-                                    }
+                                    Just island ->
+                                        island :: data.forestedIslands
                           }
                         , Cmd.none
                         )
 
                     else
-                        ( model, Cmd.none )
+                        ( data, Cmd.none )
 
                 ( OpponentGuessing, Just guessingPlayer ) ->
                     if guessingPlayer /= data.player then
-                        ( { model
-                            | page =
-                                Playing
-                                    { data
-                                        | state =
-                                            if result.win == "win" then
-                                                OpponentWon
+                        ( { data
+                            | state =
+                                if result.win == "win" then
+                                    OpponentWon
 
-                                            else
-                                                Guessing
-                                        , opponentGuesses = Coordinate row col :: data.opponentGuesses
-                                    }
+                                else
+                                    Guessing
+                            , opponentGuesses = Coordinate row col :: data.opponentGuesses
                           }
                         , Cmd.none
                         )
 
                     else
-                        ( model, Cmd.none )
+                        ( data, Cmd.none )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( data, Cmd.none )
 
-        ( _, Playing _ ) ->
-            ( model, Cmd.none )
+        _ ->
+            ( data, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
