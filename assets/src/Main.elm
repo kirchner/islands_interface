@@ -402,17 +402,7 @@ update msg model =
             ( model, Cmd.none )
 
         ( ReceivedPlayerAdded _, WaitingForGuest _ ) ->
-            ( { model
-                | page =
-                    PlayersSet
-                        { player = Host
-                        , placedIslands = []
-                        , unplacedIslands = allIslands
-                        , selection = None
-                        , requestedPlacement = Nothing
-                        , opponentReady = False
-                        }
-              }
+            ( { model | page = PlayersSet (initPlayersSet Host) }
             , Cmd.none
             )
 
@@ -434,17 +424,7 @@ update msg model =
             )
 
         ( ReceivedPlayerAdded _, JoiningHost _ ) ->
-            ( { model
-                | page =
-                    PlayersSet
-                        { player = Guest
-                        , placedIslands = []
-                        , unplacedIslands = allIslands
-                        , selection = None
-                        , requestedPlacement = Nothing
-                        , opponentReady = False
-                        }
-              }
+            ( { model | page = PlayersSet (initPlayersSet Guest) }
             , Cmd.none
             )
 
@@ -604,6 +584,17 @@ update msg model =
             ( { model | page = Playing newData }
             , cmd
             )
+
+
+initPlayersSet : Player -> PlayersSetData
+initPlayersSet player =
+    { player = player
+    , placedIslands = []
+    , unplacedIslands = allIslands
+    , selection = None
+    , requestedPlacement = Nothing
+    , opponentReady = False
+    }
 
 
 requestPositionIsland :
