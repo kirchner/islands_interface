@@ -88,8 +88,7 @@ main =
 
 
 type Model
-    = GettingDevice Flags
-    | -- HOST ONLY
+    = -- HOST ONLY
       Lobby
         { host : String
         , name : String
@@ -309,13 +308,34 @@ type alias Flags =
     { hash : String
     , protocol : String
     , host : String
+    , innerWidth : Int
+    , innerHeight : Int
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( GettingDevice flags
-    , Task.perform GotViewport Browser.Dom.getViewport
+    let
+        device =
+            Element.classifyDevice
+                { width = flags.innerWidth
+                , height = flags.innerHeight
+                }
+    in
+    ( if flags.hash == "" then
+        Lobby
+            { host = flags.protocol ++ "//" ++ flags.host
+            , name = ""
+            , device = device
+            }
+
+      else
+        JoiningHost
+            { hostName = String.dropLeft 1 flags.hash
+            , name = ""
+            , device = device
+            }
+    , Cmd.none
     )
 
 
@@ -324,8 +344,7 @@ init flags =
 
 
 type Msg
-    = GotViewport Browser.Dom.Viewport
-    | ResizedViewport Int Int
+    = ResizedViewport Int Int
     | UserChangedName String
     | UserPressedCreateGame
     | UserPressedJoinTheGame
@@ -345,63 +364,6 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
-        ( GotViewport { viewport }, GettingDevice flags ) ->
-            if flags.hash == "" then
-                ( Lobby
-                    { host = flags.protocol ++ "//" ++ flags.host
-                    , name = ""
-                    , device =
-                        Element.classifyDevice
-                            { width = Basics.round viewport.width
-                            , height = Basics.round viewport.height
-                            }
-                    }
-                , Cmd.none
-                )
-
-            else
-                ( JoiningHost
-                    { hostName = String.dropLeft 1 flags.hash
-                    , name = ""
-                    , device =
-                        Element.classifyDevice
-                            { width = Basics.round viewport.width
-                            , height = Basics.round viewport.height
-                            }
-                    }
-                , Cmd.none
-                )
-
-        ( ResizedViewport width height, GettingDevice flags ) ->
-            if flags.hash == "" then
-                ( Lobby
-                    { host = flags.protocol ++ "//" ++ flags.host
-                    , name = ""
-                    , device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                    }
-                , Cmd.none
-                )
-
-            else
-                ( JoiningHost
-                    { hostName = String.dropLeft 1 flags.hash
-                    , name = ""
-                    , device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                    }
-                , Cmd.none
-                )
-
-        ( _, GettingDevice _ ) ->
-            ( model, Cmd.none )
-
         -- ONLY HOST
         ( UserChangedName name, Lobby data ) ->
             ( Lobby { data | name = name }
@@ -802,9 +764,6 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onResize ResizedViewport
         , case model of
-            GettingDevice _ ->
-                Sub.none
-
             Lobby _ ->
                 Sub.none
 
@@ -878,9 +837,6 @@ view model =
             , Font.size 24
             ]
             (case model of
-                GettingDevice _ ->
-                    Element.none
-
                 Lobby { name } ->
                     viewLobby name
 

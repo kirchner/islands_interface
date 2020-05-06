@@ -35,6 +35,8 @@ window.addEventListener("DOMContentLoaded", function() {
       hash: window.location.hash,
       protocol: window.location.protocol,
       host: window.location.host,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
     },
   });
 
