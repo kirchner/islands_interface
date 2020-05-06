@@ -107,19 +107,22 @@ type Page
         , name : String
         }
       -- BOTH
-    | PlayersSet
-        { player : Player
-        , placedIslands : List ( Island, Coordinate )
-        , unplacedIslands : List Island
-        , selection : Selection
-        , requestedPlacement : Maybe ( Island, Coordinate )
-        , opponentReady : Bool
-        }
+    | PlayersSet PlayersSetData
     | WaitingForOpponent
         { player : Player
         , placedIslands : List ( Island, Coordinate )
         }
     | Playing PlayingData
+
+
+type alias PlayersSetData =
+    { player : Player
+    , placedIslands : List ( Island, Coordinate )
+    , unplacedIslands : List Island
+    , selection : Selection
+    , requestedPlacement : Maybe ( Island, Coordinate )
+    , opponentReady : Bool
+    }
 
 
 type alias PlayingData =
@@ -463,24 +466,11 @@ update msg model =
 
                 Island island offset ->
                     let
-                        requestedCoordinate =
-                            { row = coordinate.row - offset.row
-                            , col = coordinate.col - offset.col
-                            }
+                        ( newData, cmd ) =
+                            requestPositionIsland coordinate island offset data
                     in
-                    ( { model
-                        | page =
-                            PlayersSet
-                                { data
-                                    | selection = None
-                                    , requestedPlacement = Just ( island, requestedCoordinate )
-                                }
-                      }
-                    , positionIsland
-                        { island = islandToString island
-                        , row = requestedCoordinate.row
-                        , col = requestedCoordinate.col
-                        }
+                    ( { model | page = PlayersSet newData }
+                    , cmd
                     )
 
         ( UserPressedIslandTile island offset, PlayersSet data ) ->
@@ -492,24 +482,11 @@ update msg model =
 
                 Tile coordinate ->
                     let
-                        requestedCoordinate =
-                            { row = coordinate.row - offset.row
-                            , col = coordinate.col - offset.col
-                            }
+                        ( newData, cmd ) =
+                            requestPositionIsland coordinate island offset data
                     in
-                    ( { model
-                        | page =
-                            PlayersSet
-                                { data
-                                    | selection = None
-                                    , requestedPlacement = Just ( island, requestedCoordinate )
-                                }
-                      }
-                    , positionIsland
-                        { island = islandToString island
-                        , row = requestedCoordinate.row
-                        , col = requestedCoordinate.col
-                        }
+                    ( { model | page = PlayersSet newData }
+                    , cmd
                     )
 
                 Island _ _ ->
@@ -627,6 +604,31 @@ update msg model =
             ( { model | page = Playing newData }
             , cmd
             )
+
+
+requestPositionIsland :
+    Coordinate
+    -> Island
+    -> Coordinate
+    -> PlayersSetData
+    -> ( PlayersSetData, Cmd Msg )
+requestPositionIsland coordinate island offset data =
+    let
+        requestedCoordinate =
+            { row = coordinate.row - offset.row
+            , col = coordinate.col - offset.col
+            }
+    in
+    ( { data
+        | selection = None
+        , requestedPlacement = Just ( island, requestedCoordinate )
+      }
+    , positionIsland
+        { island = islandToString island
+        , row = requestedCoordinate.row
+        , col = requestedCoordinate.col
+        }
+    )
 
 
 initPlaying : Player -> List ( Island, Coordinate ) -> PlayingData
