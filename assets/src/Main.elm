@@ -488,24 +488,7 @@ update msg model =
                             if island_ == requestedIsland && Coordinate row col == coordinate then
                                 ( { model
                                     | page =
-                                        PlayersSet
-                                            { data
-                                                | selection = None
-                                                , placedIslands =
-                                                    ( island_
-                                                    , { row = row
-                                                      , col = col
-                                                      }
-                                                    )
-                                                        :: data.placedIslands
-                                                , unplacedIslands =
-                                                    List.filter
-                                                        (\unplacedIsland ->
-                                                            unplacedIsland /= island_
-                                                        )
-                                                        data.unplacedIslands
-                                                , requestedPlacement = Nothing
-                                            }
+                                        PlayersSet (addToPlacedIslands island_ row col data)
                                   }
                                 , Cmd.none
                                 )
@@ -620,6 +603,25 @@ requestPositionIsland coordinate island offset data =
         , col = requestedCoordinate.col
         }
     )
+
+
+addToPlacedIslands : Island -> Int -> Int -> PlayersSetData -> PlayersSetData
+addToPlacedIslands island row col data =
+    { data
+        | selection = None
+        , placedIslands =
+            ( island
+            , { row = row
+              , col = col
+              }
+            )
+                :: data.placedIslands
+        , unplacedIslands =
+            List.filter
+                (\unplacedIsland -> unplacedIsland /= island)
+                data.unplacedIslands
+        , requestedPlacement = Nothing
+    }
 
 
 initPlaying : Player -> List ( Island, Coordinate ) -> PlayingData
