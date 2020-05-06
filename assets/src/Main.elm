@@ -1,7 +1,6 @@
 port module Main exposing (main)
 
 import Browser
-import Browser.Dom
 import Browser.Events
 import Element exposing (Device, DeviceClass(..), Element)
 import Element.Background as Background
@@ -9,7 +8,6 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Region as Region
 import Set
-import Task
 import Ui.Atom.Button as Button exposing (button)
 import Ui.Atom.InputText as InputText exposing (inputText)
 import Ui.Atom.Tile as Tile exposing (tile)
@@ -87,23 +85,26 @@ main =
 -- MODEL
 
 
-type Model
+type alias Model =
+    { device : Device
+    , page : Page
+    }
+
+
+type Page
     = -- HOST ONLY
       Lobby
         { host : String
         , name : String
-        , device : Device
         }
     | WaitingForGuest
         { host : String
         , name : String
-        , device : Device
         }
       -- GUEST ONLY
     | JoiningHost
         { hostName : String
         , name : String
-        , device : Device
         }
       -- BOTH
     | PlayersSet
@@ -113,12 +114,10 @@ type Model
         , selection : Selection
         , requestedPlacement : Maybe ( Island, Coordinate )
         , opponentReady : Bool
-        , device : Device
         }
     | WaitingForOpponent
         { player : Player
         , placedIslands : List ( Island, Coordinate )
-        , device : Device
         }
     | Playing PlayingData
 
@@ -130,7 +129,6 @@ type alias PlayingData =
     , opponentGuesses : List Coordinate
     , opponentTiles : List ( Coordinate, Bool )
     , forestedIslands : List Island
-    , device : Device
     }
 
 
@@ -316,25 +314,26 @@ type alias Flags =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
-        device =
+        page =
+            if flags.hash == "" then
+                Lobby
+                    { host = flags.protocol ++ "//" ++ flags.host
+                    , name = ""
+                    }
+
+            else
+                JoiningHost
+                    { hostName = String.dropLeft 1 flags.hash
+                    , name = ""
+                    }
+    in
+    ( { device =
             Element.classifyDevice
                 { width = flags.innerWidth
                 , height = flags.innerHeight
                 }
-    in
-    ( if flags.hash == "" then
-        Lobby
-            { host = flags.protocol ++ "//" ++ flags.host
-            , name = ""
-            , device = device
-            }
-
-      else
-        JoiningHost
-            { hostName = String.dropLeft 1 flags.hash
-            , name = ""
-            , device = device
-            }
+      , page = page
+      }
     , Cmd.none
     )
 
@@ -363,63 +362,54 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case ( msg, model ) of
-        -- ONLY HOST
-        ( UserChangedName name, Lobby data ) ->
-            ( Lobby { data | name = name }
+    case ( msg, model.page ) of
+        ( ResizedViewport width height, _ ) ->
+            ( { model
+                | device =
+                    Element.classifyDevice
+                        { width = width
+                        , height = height
+                        }
+              }
             , Cmd.none
             )
 
-        ( UserPressedCreateGame, Lobby { host, name, device } ) ->
+        -- ONLY HOST
+        ( UserChangedName name, Lobby data ) ->
+            ( { model | page = Lobby { data | name = name } }
+            , Cmd.none
+            )
+
+        ( UserPressedCreateGame, Lobby { host, name } ) ->
             if name == "" then
                 ( model, Cmd.none )
 
             else
-                ( WaitingForGuest
-                    { host = host
-                    , name = name
-                    , device = device
-                    }
+                ( { model
+                    | page =
+                        WaitingForGuest
+                            { host = host
+                            , name = name
+                            }
+                  }
                 , createGame name
                 )
-
-        ( ResizedViewport width height, Lobby data ) ->
-            ( Lobby
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
-            , Cmd.none
-            )
 
         ( _, Lobby _ ) ->
             ( model, Cmd.none )
 
-        ( ReceivedPlayerAdded _, WaitingForGuest { device } ) ->
-            ( PlayersSet
-                { player = Host
-                , placedIslands = []
-                , unplacedIslands = allIslands
-                , selection = None
-                , requestedPlacement = Nothing
-                , opponentReady = False
-                , device = device
-                }
-            , Cmd.none
-            )
-
-        ( ResizedViewport width height, WaitingForGuest data ) ->
-            ( WaitingForGuest
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
+        ( ReceivedPlayerAdded _, WaitingForGuest _ ) ->
+            ( { model
+                | page =
+                    PlayersSet
+                        { player = Host
+                        , placedIslands = []
+                        , unplacedIslands = allIslands
+                        , selection = None
+                        , requestedPlacement = Nothing
+                        , opponentReady = False
+                        }
+              }
             , Cmd.none
             )
 
@@ -428,7 +418,7 @@ update msg model =
 
         -- ONLY GUEST
         ( UserChangedName name, JoiningHost data ) ->
-            ( JoiningHost { data | name = name }
+            ( { model | page = JoiningHost { data | name = name } }
             , Cmd.none
             )
 
@@ -440,28 +430,18 @@ update msg model =
                 }
             )
 
-        ( ReceivedPlayerAdded _, JoiningHost { device } ) ->
-            ( PlayersSet
-                { player = Guest
-                , placedIslands = []
-                , unplacedIslands = allIslands
-                , selection = None
-                , requestedPlacement = Nothing
-                , opponentReady = False
-                , device = device
-                }
-            , Cmd.none
-            )
-
-        ( ResizedViewport width height, JoiningHost data ) ->
-            ( JoiningHost
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
+        ( ReceivedPlayerAdded _, JoiningHost _ ) ->
+            ( { model
+                | page =
+                    PlayersSet
+                        { player = Guest
+                        , placedIslands = []
+                        , unplacedIslands = allIslands
+                        , selection = None
+                        , requestedPlacement = Nothing
+                        , opponentReady = False
+                        }
+              }
             , Cmd.none
             )
 
@@ -472,12 +452,12 @@ update msg model =
         ( UserPressedTile coordinate, PlayersSet data ) ->
             case data.selection of
                 None ->
-                    ( PlayersSet { data | selection = Tile coordinate }
+                    ( { model | page = PlayersSet { data | selection = Tile coordinate } }
                     , Cmd.none
                     )
 
                 Tile _ ->
-                    ( PlayersSet { data | selection = Tile coordinate }
+                    ( { model | page = PlayersSet { data | selection = Tile coordinate } }
                     , Cmd.none
                     )
 
@@ -488,11 +468,14 @@ update msg model =
                             , col = coordinate.col - offset.col
                             }
                     in
-                    ( PlayersSet
-                        { data
-                            | selection = None
-                            , requestedPlacement = Just ( island, requestedCoordinate )
-                        }
+                    ( { model
+                        | page =
+                            PlayersSet
+                                { data
+                                    | selection = None
+                                    , requestedPlacement = Just ( island, requestedCoordinate )
+                                }
+                      }
                     , positionIsland
                         { island = islandToString island
                         , row = requestedCoordinate.row
@@ -503,7 +486,7 @@ update msg model =
         ( UserPressedIslandTile island offset, PlayersSet data ) ->
             case data.selection of
                 None ->
-                    ( PlayersSet { data | selection = Island island offset }
+                    ( { model | page = PlayersSet { data | selection = Island island offset } }
                     , Cmd.none
                     )
 
@@ -514,11 +497,14 @@ update msg model =
                             , col = coordinate.col - offset.col
                             }
                     in
-                    ( PlayersSet
-                        { data
-                            | selection = None
-                            , requestedPlacement = Just ( island, requestedCoordinate )
-                        }
+                    ( { model
+                        | page =
+                            PlayersSet
+                                { data
+                                    | selection = None
+                                    , requestedPlacement = Just ( island, requestedCoordinate )
+                                }
+                      }
                     , positionIsland
                         { island = islandToString island
                         , row = requestedCoordinate.row
@@ -527,7 +513,7 @@ update msg model =
                     )
 
                 Island _ _ ->
-                    ( PlayersSet { data | selection = Island island offset }
+                    ( { model | page = PlayersSet { data | selection = Island island offset } }
                     , Cmd.none
                     )
 
@@ -543,24 +529,27 @@ update msg model =
 
                         Just ( requestedIsland, coordinate ) ->
                             if island_ == requestedIsland && Coordinate row col == coordinate then
-                                ( PlayersSet
-                                    { data
-                                        | selection = None
-                                        , placedIslands =
-                                            ( island_
-                                            , { row = row
-                                              , col = col
-                                              }
-                                            )
-                                                :: data.placedIslands
-                                        , unplacedIslands =
-                                            List.filter
-                                                (\unplacedIsland ->
-                                                    unplacedIsland /= island_
-                                                )
-                                                data.unplacedIslands
-                                        , requestedPlacement = Nothing
-                                    }
+                                ( { model
+                                    | page =
+                                        PlayersSet
+                                            { data
+                                                | selection = None
+                                                , placedIslands =
+                                                    ( island_
+                                                    , { row = row
+                                                      , col = col
+                                                      }
+                                                    )
+                                                        :: data.placedIslands
+                                                , unplacedIslands =
+                                                    List.filter
+                                                        (\unplacedIsland ->
+                                                            unplacedIsland /= island_
+                                                        )
+                                                        data.unplacedIslands
+                                                , requestedPlacement = Nothing
+                                            }
+                                  }
                                 , Cmd.none
                                 )
 
@@ -579,11 +568,14 @@ update msg model =
 
                         Just ( requestedIsland, coordinate ) ->
                             if island_ == requestedIsland && Coordinate row col == coordinate then
-                                ( PlayersSet
-                                    { data
-                                        | selection = None
-                                        , requestedPlacement = Nothing
-                                    }
+                                ( { model
+                                    | page =
+                                        PlayersSet
+                                            { data
+                                                | selection = None
+                                                , requestedPlacement = Nothing
+                                            }
+                                  }
                                 , Cmd.none
                                 )
 
@@ -591,50 +583,42 @@ update msg model =
                                 ( model, Cmd.none )
 
         ( ReceivedOpponentSetIslands (), PlayersSet data ) ->
-            ( PlayersSet { data | opponentReady = True }
+            ( { model | page = PlayersSet { data | opponentReady = True } }
             , Cmd.none
             )
 
         ( UserPressedImReady, PlayersSet data ) ->
             if data.opponentReady then
-                ( Playing
-                    { player = data.player
-                    , state =
-                        case data.player of
-                            Host ->
-                                Guessing
+                ( { model
+                    | page =
+                        Playing
+                            { player = data.player
+                            , state =
+                                case data.player of
+                                    Host ->
+                                        Guessing
 
-                            Guest ->
-                                OpponentGuessing
-                    , placedIslands = data.placedIslands
-                    , opponentGuesses = []
-                    , opponentTiles = []
-                    , forestedIslands = []
-                    , device = data.device
-                    }
+                                    Guest ->
+                                        OpponentGuessing
+                            , placedIslands = data.placedIslands
+                            , opponentGuesses = []
+                            , opponentTiles = []
+                            , forestedIslands = []
+                            }
+                  }
                 , setIslands ()
                 )
 
             else
-                ( WaitingForOpponent
-                    { player = data.player
-                    , placedIslands = data.placedIslands
-                    , device = data.device
-                    }
+                ( { model
+                    | page =
+                        WaitingForOpponent
+                            { player = data.player
+                            , placedIslands = data.placedIslands
+                            }
+                  }
                 , setIslands ()
                 )
-
-        ( ResizedViewport width height, PlayersSet data ) ->
-            ( PlayersSet
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
-            , Cmd.none
-            )
 
         ( _, PlayersSet _ ) ->
             ( model, Cmd.none )
@@ -643,33 +627,23 @@ update msg model =
             ( model, Cmd.none )
 
         ( ReceivedOpponentSetIslands (), WaitingForOpponent data ) ->
-            ( Playing
-                { player = data.player
-                , state =
-                    case data.player of
-                        Host ->
-                            Guessing
+            ( { model
+                | page =
+                    Playing
+                        { player = data.player
+                        , state =
+                            case data.player of
+                                Host ->
+                                    Guessing
 
-                        Guest ->
-                            OpponentGuessing
-                , placedIslands = data.placedIslands
-                , opponentGuesses = []
-                , opponentTiles = []
-                , forestedIslands = []
-                , device = data.device
-                }
-            , Cmd.none
-            )
-
-        ( ResizedViewport width height, WaitingForOpponent data ) ->
-            ( WaitingForOpponent
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
+                                Guest ->
+                                    OpponentGuessing
+                        , placedIslands = data.placedIslands
+                        , opponentGuesses = []
+                        , opponentTiles = []
+                        , forestedIslands = []
+                        }
+              }
             , Cmd.none
             )
 
@@ -680,7 +654,7 @@ update msg model =
         ( UserPressedOpponentTile coordinate, Playing data ) ->
             case data.state of
                 Guessing ->
-                    ( Playing { data | state = Guessed coordinate }
+                    ( { model | page = Playing { data | state = Guessed coordinate } }
                     , guessCoordinate
                         { player = playerToString data.player
                         , row = coordinate.row
@@ -698,24 +672,27 @@ update msg model =
             case ( data.state, playerFromString player ) of
                 ( Guessed coordinate, Just guessingPlayer ) ->
                     if guessingPlayer == data.player && Coordinate row col == coordinate then
-                        ( Playing
-                            { data
-                                | state =
-                                    if result.win == "win" then
-                                        Won
+                        ( { model
+                            | page =
+                                Playing
+                                    { data
+                                        | state =
+                                            if result.win == "win" then
+                                                Won
 
-                                    else
-                                        OpponentGuessing
-                                , opponentTiles =
-                                    ( coordinate, result.hit ) :: data.opponentTiles
-                                , forestedIslands =
-                                    case islandFromString result.island of
-                                        Nothing ->
-                                            data.forestedIslands
+                                            else
+                                                OpponentGuessing
+                                        , opponentTiles =
+                                            ( coordinate, result.hit ) :: data.opponentTiles
+                                        , forestedIslands =
+                                            case islandFromString result.island of
+                                                Nothing ->
+                                                    data.forestedIslands
 
-                                        Just island ->
-                                            island :: data.forestedIslands
-                            }
+                                                Just island ->
+                                                    island :: data.forestedIslands
+                                    }
+                          }
                         , Cmd.none
                         )
 
@@ -724,16 +701,19 @@ update msg model =
 
                 ( OpponentGuessing, Just guessingPlayer ) ->
                     if guessingPlayer /= data.player then
-                        ( Playing
-                            { data
-                                | state =
-                                    if result.win == "win" then
-                                        OpponentWon
+                        ( { model
+                            | page =
+                                Playing
+                                    { data
+                                        | state =
+                                            if result.win == "win" then
+                                                OpponentWon
 
-                                    else
-                                        Guessing
-                                , opponentGuesses = Coordinate row col :: data.opponentGuesses
-                            }
+                                            else
+                                                Guessing
+                                        , opponentGuesses = Coordinate row col :: data.opponentGuesses
+                                    }
+                          }
                         , Cmd.none
                         )
 
@@ -743,18 +723,6 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        ( ResizedViewport width height, Playing data ) ->
-            ( Playing
-                { data
-                    | device =
-                        Element.classifyDevice
-                            { width = width
-                            , height = height
-                            }
-                }
-            , Cmd.none
-            )
-
         ( _, Playing _ ) ->
             ( model, Cmd.none )
 
@@ -763,7 +731,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Browser.Events.onResize ResizedViewport
-        , case model of
+        , case model.page of
             Lobby _ ->
                 Sub.none
 
@@ -836,7 +804,7 @@ view model =
                 ]
             , Font.size 24
             ]
-            (case model of
+            (case model.page of
                 Lobby { name } ->
                     viewLobby name
 
@@ -846,14 +814,14 @@ view model =
                 JoiningHost { hostName, name } ->
                     viewJoiningHost hostName name
 
-                PlayersSet { placedIslands, unplacedIslands, selection, opponentReady, device } ->
-                    viewPlayersSet device placedIslands unplacedIslands selection opponentReady
+                PlayersSet { placedIslands, unplacedIslands, selection, opponentReady } ->
+                    viewPlayersSet model.device placedIslands unplacedIslands selection opponentReady
 
-                WaitingForOpponent { placedIslands, device } ->
-                    viewWaitingForOpponent device placedIslands
+                WaitingForOpponent { placedIslands } ->
+                    viewWaitingForOpponent model.device placedIslands
 
                 Playing data ->
-                    viewPlaying data
+                    viewPlaying model.device data
             )
         ]
     }
@@ -996,8 +964,8 @@ viewWaitingForOpponent device placedIslands =
         ]
 
 
-viewPlaying : PlayingData -> Element Msg
-viewPlaying data =
+viewPlaying : Device -> PlayingData -> Element Msg
+viewPlaying device data =
     Element.column
         [ Element.centerX
         , Element.paddingXY 0 Ui.Theme.Spacing.level3
@@ -1015,7 +983,7 @@ viewPlaying data =
                     , Element.alignTop
                     ]
                     [ Ui.Theme.Typography.heading "Opponent's sea"
-                    , viewField data.device
+                    , viewField device
                         (viewOpponentTile data.opponentTiles)
                     , Element.paragraph []
                         [ Element.text (forestedInfo data.forestedIslands) ]
@@ -1037,7 +1005,7 @@ viewPlaying data =
                 , Element.alignTop
                 ]
                 [ Ui.Theme.Typography.heading "Your sea"
-                , viewField data.device (viewYourTile data.placedIslands data.opponentGuesses)
+                , viewField device (viewYourTile data.placedIslands data.opponentGuesses)
                 , case data.state of
                     OpponentGuessing ->
                         Element.el
