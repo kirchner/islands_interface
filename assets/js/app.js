@@ -21,11 +21,79 @@ var phoenix = require("phoenix");
 import { Elm } from "../src/Main.elm";
 
 
-var socket = new phoenix.Socket("/socket", {});
-socket.connect()
+function setup(socket, app) {
+  var channels = {};
+  var ons = {};
 
-function new_channel(subtopic, screen_name) {
-  return socket.channel("game:" + subtopic, {screen_name: screen_name});
+  app.ports.join.subscribe(args => {
+    channels[args.name] = socket.channel(args.name, args.params);
+    channels[args.name].join()
+      .receive("error", payload =>
+        app.ports.joinError.send({
+          name: args.name,
+          payload: payload,
+        }),
+      )
+      .receive("ok", payload =>
+        app.ports.joinOk.send({
+          name: args.name,
+          payload: payload,
+        }),
+      );
+  });
+
+  app.ports.push.subscribe(args => {
+    if (channels[args.channel]) {
+      var handleReceive = push =>
+        push
+          .receive("error", payload =>
+            app.ports.pushError.send({
+              id: args.id,
+              payload: payload,
+            })
+          )
+          .receive("ok", payload =>
+            app.ports.pushOk.send({
+              id: args.id,
+              payload: payload,
+            })
+          );
+
+      if (args.payload) {
+        handleReceive(channels[args.channel].push(args.event, args.payload))
+      } else {
+        handleReceive(channels[args.channel].push(args.event))
+      }
+    } else {
+      // TODO: report this error
+    }
+  });
+
+  app.ports.on.subscribe(args => {
+    if (channels[args.channel]) {
+      ons[args.event] = channels[args.channel].on(args.event, payload =>
+        app.ports.onReceive.send({
+          channel: args.channel,
+          event: args.event,
+          payload: payload,
+        })
+      );
+    } else {
+      // TODO: report this error
+    }
+  });
+
+  app.ports.off.subscribe(args => {
+    if (channels[args.channel]) {
+      if (ons[args.event]) {
+        channels[args.channel].off(args.event, ons[args.event]);
+      } else {
+        // TODO: report this error
+      }
+    } else {
+      // TODO: report this error
+    }
+  });
 }
 
 
@@ -40,75 +108,8 @@ window.addEventListener("DOMContentLoaded", function() {
     },
   });
 
+  var socket = new phoenix.Socket("/socket", {});
+  socket.connect()
 
-  app.ports.createGame.subscribe(name => {
-    var channel = new_channel(name, name);
-
-    join(app, channel, "player1", () =>
-      channel.push("new_game")
-        .receive("error", response => console.error("Unable to start a new game", response))
-        .receive("ok", response => console.log("New Game!", response))
-    );
-  });
-
-
-  app.ports.joinGame.subscribe((params) => {
-    var channel = new_channel(params.hostName, params.name);
-
-    join(app, channel, "player2", () =>
-      channel.push("add_player", params.name)
-        .receive("error", response =>
-          console.error("Unable to add new player: " + player, response)
-        )
-    );
-  });
+  setup(socket, app);
 });
-
-
-function join(app, channel, player, onJoin) {
-  channel.on("player_added", () => {
-    app.ports.playerAdded.send(null);
-  });
-
-  app.ports.positionIsland.subscribe(params => {
-    params.player = player;
-
-    channel.push("position_island", params)
-      .receive("ok", () => app.ports.positionedIsland.send(params))
-      .receive("error", () => app.ports.failedPositioningIsland.send(params));
-  });
-
-  app.ports.setIslands.subscribe(() =>
-    channel.push("set_islands", player)
-      .receive("ok", () => app.ports.receivedBoard.send(null))
-      .receive("error", () => app.ports.failedSettingIslands.send(null))
-  );
-
-  channel.on("player_set_islands", response => {
-    if (response.player !== player) {
-      app.ports.opponentSetIslands.send(null);
-    }
-  });
-
-  app.ports.guessCoordinate.subscribe(params =>
-    channel.push("guess_coordinate", params)
-      .receive("error", () => app.ports.failedGuessingCoordinate.send(null))
-  );
-
-  channel.on("player_guessed_coordinate", response =>
-    app.ports.playerGuessedCoordinate.send(response)
-  )
-
-  /* app.ports.leave.subscribe(() =>
-    channel.leave()
-      .receive("error", response => console.error("Unable to leave", response))
-      .receive("ok", response => console.log("Left successfully", response))
-  ); */
-
-  channel.join()
-    .receive("error", response => console.error("Unable to join", response))
-    .receive("ok", response => {
-      console.log("Joined successfully!", response);
-      onJoin();
-    });
-}

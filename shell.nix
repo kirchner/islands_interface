@@ -8,5 +8,6 @@ mkShell {
     elmPackages.elm-language-server
     expect
     nodejs
+    inotifyTools
   ];
 }

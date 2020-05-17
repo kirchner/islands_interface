@@ -1,12 +1,16 @@
-port module Main exposing (main)
+module Main exposing (main)
 
 import Browser
 import Browser.Events
+import Channel exposing (Channel, Effect)
 import Element exposing (Device, DeviceClass(..), Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Region as Region
+import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline as Decode
+import Json.Encode as Encode exposing (Value)
 import Set
 import Ui.Atom.Button as Button exposing (button)
 import Ui.Atom.InputText as InputText exposing (inputText)
@@ -17,66 +21,45 @@ import Ui.Theme.Typography
 import Url.Builder
 
 
-port createGame : String -> Cmd msg
-
-
-port joinGame : { hostName : String, name : String } -> Cmd msg
-
-
-port leave : () -> Cmd msg
-
-
-port playerAdded : (() -> msg) -> Sub msg
-
-
-port positionIsland : { island : String, row : Int, col : Int } -> Cmd msg
-
-
-port positionedIsland : ({ island : String, row : Int, col : Int } -> msg) -> Sub msg
-
-
-port failedPositioningIsland : ({ island : String, row : Int, col : Int } -> msg) -> Sub msg
-
-
-port setIslands : () -> Cmd msg
-
-
-port receivedBoard : (() -> msg) -> Sub msg
-
-
-port failedSettingIslands : (() -> msg) -> Sub msg
-
-
-port opponentSetIslands : (() -> msg) -> Sub msg
-
-
-port guessCoordinate : { player : String, row : Int, col : Int } -> Cmd msg
-
-
-port failedGuessingCoordinate : (() -> msg) -> Sub msg
-
-
-port playerGuessedCoordinate : (GuessedCoordinate -> msg) -> Sub msg
-
-
 type alias GuessedCoordinate =
     { player : String
     , row : Int
     , col : Int
-    , result :
-        { hit : Bool
-        , island : String
-        , win : String
-        }
+    , result : GuessResult
     }
 
 
-main : Program Flags Model Msg
+type alias GuessResult =
+    { hit : Bool
+    , island : String
+    , win : String
+    }
+
+
+guessedCoordinateDecoder : Decoder GuessedCoordinate
+guessedCoordinateDecoder =
+    Decode.succeed GuessedCoordinate
+        |> Decode.required "player" Decode.string
+        |> Decode.required "row" Decode.int
+        |> Decode.required "col" Decode.int
+        |> Decode.required "result" guessResultDecoder
+
+
+guessResultDecoder : Decoder GuessResult
+guessResultDecoder =
+    Decode.succeed GuessResult
+        |> Decode.required "hit" Decode.bool
+        |> Decode.required "island" Decode.string
+        |> Decode.required "win" Decode.string
+
+
+main : Program Flags (Channel.Model Model Msg) (Channel.Msg Msg)
 main =
-    Browser.document
+    Channel.document
         { init = init
-        , subscriptions = subscriptions
         , update = update
+        , subscriptions = subscriptions
+        , eventSubscriptions = eventSubscriptions
         , view = view
         }
 
@@ -93,30 +76,42 @@ type alias Model =
 
 type Page
     = -- HOST ONLY
-      Lobby
+      CreatingGame
         { host : String
         , name : String
+        , channel : Requested Channel
         }
     | WaitingForGuest
         { host : String
         , name : String
+        , channel : Channel
         }
       -- GUEST ONLY
-    | JoiningHost
+    | JoiningGame
         { hostName : String
         , name : String
+        , channel : Requested Channel
         }
       -- BOTH
     | PlayersSet PlayersSetData
     | WaitingForOpponent
-        { player : Player
+        { channel : Channel
+        , player : Player
         , placedIslands : List ( Island, Coordinate )
         }
     | Playing PlayingData
 
 
+type Requested a
+    = NotAsked
+    | Requesting
+    | Received a
+    | RequestFailed
+
+
 type alias PlayersSetData =
-    { player : Player
+    { channel : Channel
+    , player : Player
     , placedIslands : List ( Island, Coordinate )
     , unplacedIslands : List Island
     , selection : Selection
@@ -126,7 +121,8 @@ type alias PlayersSetData =
 
 
 type alias PlayingData =
-    { player : Player
+    { channel : Channel
+    , player : Player
     , state : State
     , placedIslands : List ( Island, Coordinate )
     , opponentGuesses : List Coordinate
@@ -314,20 +310,22 @@ type alias Flags =
     }
 
 
-init : Flags -> ( Model, Cmd Msg )
+init : Flags -> ( Model, Effect Msg )
 init flags =
     let
         page =
             if flags.hash == "" then
-                Lobby
+                CreatingGame
                     { host = flags.protocol ++ "//" ++ flags.host
                     , name = ""
+                    , channel = NotAsked
                     }
 
             else
-                JoiningHost
+                JoiningGame
                     { hostName = String.dropLeft 1 flags.hash
                     , name = ""
+                    , channel = NotAsked
                     }
     in
     ( { device =
@@ -337,7 +335,7 @@ init flags =
                 }
       , page = page
       }
-    , Cmd.none
+    , Channel.none
     )
 
 
@@ -349,21 +347,25 @@ type Msg
     = ResizedViewport Int Int
     | UserChangedName String
     | UserPressedCreateGame
+    | ReceivedJoinResult (Result Channel.Error ( Channel, Value ))
+    | ReceivedNewGameResponse (Result Channel.Error ())
     | UserPressedJoinTheGame
-    | ReceivedPlayerAdded ()
+    | ReceivedAddPlayerResult (Result Channel.Error ())
+    | ReceivedPlayerAdded Value
+      --
     | UserPressedTile Coordinate
     | UserPressedIslandTile Island Coordinate
-    | ReceivedPositionedIsland { island : String, row : Int, col : Int }
-    | ReceivedFailedPositioningIsland { island : String, row : Int, col : Int }
-    | ReceivedOpponentSetIslands ()
+    | ReceivedPositionIslandResult Island Int Int (Result Channel.Error ())
+    | ReceivedPlayerSetIslands Value
     | UserPressedImReady
-    | ReceivedBoard ()
+    | ReceivedSetIslandResult (Result Channel.Error ())
+      --
     | UserPressedOpponentTile Coordinate
-    | ReceivedFailedGuessingCoordinate ()
-    | ReceivedPlayerGuessedCoordinate GuessedCoordinate
+    | ReceivedGuessCoordinateResult (Result Channel.Error ())
+    | ReceivedPlayerGuessedCoordinate Value
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg -> Model -> ( Model, Effect Msg )
 update msg model =
     case ( msg, model.page ) of
         ( ResizedViewport width height, _ ) ->
@@ -374,90 +376,177 @@ update msg model =
                         , height = height
                         }
               }
-            , Cmd.none
+            , Channel.none
             )
 
         -- ONLY HOST
-        ( UserChangedName name, Lobby data ) ->
-            ( { model | page = Lobby { data | name = name } }
-            , Cmd.none
+        ( UserChangedName name, CreatingGame data ) ->
+            ( { model | page = CreatingGame { data | name = name } }
+            , Channel.none
             )
 
-        ( UserPressedCreateGame, Lobby { host, name } ) ->
+        ( UserPressedCreateGame, CreatingGame { host, name } ) ->
             if name == "" then
-                ( model, Cmd.none )
+                ( model, Channel.none )
 
             else
                 ( { model
                     | page =
-                        WaitingForGuest
+                        CreatingGame
                             { host = host
                             , name = name
+                            , channel = Requesting
                             }
                   }
-                , createGame name
+                , Channel.join ReceivedJoinResult
+                    ("game:" ++ name)
+                    (Encode.object
+                        [ ( "screen_name", Encode.string name ) ]
+                    )
                 )
 
-        ( _, Lobby _ ) ->
-            ( model, Cmd.none )
+        ( ReceivedJoinResult result, CreatingGame { host, name } ) ->
+            case result of
+                Err _ ->
+                    ( { model
+                        | page =
+                            CreatingGame
+                                { host = host
+                                , name = name
+                                , channel = RequestFailed
+                                }
+                      }
+                    , Channel.none
+                    )
 
-        ( ReceivedPlayerAdded _, WaitingForGuest _ ) ->
-            ( { model | page = PlayersSet (initPlayersSet Host) }
-            , Cmd.none
+                Ok ( channel, _ ) ->
+                    ( { model
+                        | page =
+                            CreatingGame
+                                { host = host
+                                , name = name
+                                , channel = Received channel
+                                }
+                      }
+                    , Channel.push ReceivedNewGameResponse
+                        (Decode.succeed ())
+                        channel
+                        "new_game"
+                        Encode.null
+                    )
+
+        ( ReceivedNewGameResponse result, CreatingGame data ) ->
+            case result of
+                Err _ ->
+                    ( model, Channel.none )
+
+                Ok _ ->
+                    case data.channel of
+                        Received channel ->
+                            ( { model
+                                | page =
+                                    WaitingForGuest
+                                        { host = data.host
+                                        , name = data.name
+                                        , channel = channel
+                                        }
+                              }
+                            , Channel.none
+                            )
+
+                        _ ->
+                            ( model, Channel.none )
+
+        ( _, CreatingGame _ ) ->
+            ( model, Channel.none )
+
+        ( ReceivedPlayerAdded _, WaitingForGuest { channel } ) ->
+            ( { model | page = PlayersSet (initPlayersSet channel Host) }
+            , Channel.none
             )
 
         ( _, WaitingForGuest _ ) ->
-            ( model, Cmd.none )
+            ( model, Channel.none )
 
         -- ONLY GUEST
-        ( UserChangedName name, JoiningHost data ) ->
-            ( { model | page = JoiningHost { data | name = name } }
-            , Cmd.none
+        ( UserChangedName name, JoiningGame data ) ->
+            ( { model | page = JoiningGame { data | name = name } }
+            , Channel.none
             )
 
-        ( UserPressedJoinTheGame, JoiningHost { hostName, name } ) ->
-            ( model
-            , joinGame
-                { hostName = hostName
-                , name = name
-                }
+        ( UserPressedJoinTheGame, JoiningGame { hostName, name } ) ->
+            ( { model
+                | page =
+                    JoiningGame
+                        { hostName = hostName
+                        , name = name
+                        , channel = Requesting
+                        }
+              }
+            , Channel.join ReceivedJoinResult
+                ("game:" ++ hostName)
+                (Encode.object
+                    [ ( "screen_name", Encode.string name ) ]
+                )
             )
 
-        ( ReceivedPlayerAdded _, JoiningHost _ ) ->
-            ( { model | page = PlayersSet (initPlayersSet Guest) }
-            , Cmd.none
-            )
+        ( ReceivedJoinResult result, JoiningGame data ) ->
+            case result of
+                Err _ ->
+                    ( model, Channel.none )
 
-        ( _, JoiningHost _ ) ->
-            ( model, Cmd.none )
+                Ok ( channel, _ ) ->
+                    ( { model | page = JoiningGame { data | channel = Received channel } }
+                    , Channel.push ReceivedAddPlayerResult
+                        (Decode.succeed ())
+                        channel
+                        "add_player"
+                        (Encode.string data.name)
+                    )
+
+        ( ReceivedAddPlayerResult _, JoiningGame _ ) ->
+            ( model, Channel.none )
+
+        ( ReceivedPlayerAdded _, JoiningGame data ) ->
+            case data.channel of
+                Received channel ->
+                    ( { model | page = PlayersSet (initPlayersSet channel Guest) }
+                    , Channel.none
+                    )
+
+                _ ->
+                    ( model, Channel.none )
+
+        ( _, JoiningGame _ ) ->
+            ( model, Channel.none )
 
         -- BOTH
         ( UserPressedTile coordinate, PlayersSet data ) ->
             case data.selection of
                 None ->
                     ( { model | page = PlayersSet { data | selection = Tile coordinate } }
-                    , Cmd.none
+                    , Channel.none
                     )
 
                 Tile _ ->
                     ( { model | page = PlayersSet { data | selection = Tile coordinate } }
-                    , Cmd.none
+                    , Channel.none
                     )
 
                 Island island offset ->
                     let
-                        ( newData, cmd ) =
+                        ( newData, effect ) =
                             requestPositionIsland coordinate island offset data
                     in
                     ( { model | page = PlayersSet newData }
-                    , cmd
+                    , effect
                     )
 
         ( UserPressedIslandTile island offset, PlayersSet data ) ->
             case data.selection of
                 None ->
                     ( { model | page = PlayersSet { data | selection = Island island offset } }
-                    , Cmd.none
+                    , Channel.none
                     )
 
                 Tile coordinate ->
@@ -471,43 +560,18 @@ update msg model =
 
                 Island _ _ ->
                     ( { model | page = PlayersSet { data | selection = Island island offset } }
-                    , Cmd.none
+                    , Channel.none
                     )
 
-        ( ReceivedPositionedIsland { island, row, col }, PlayersSet data ) ->
-            case islandFromString island of
+        ( ReceivedPositionIslandResult island row col result, PlayersSet data ) ->
+            case data.requestedPlacement of
                 Nothing ->
-                    ( model, Cmd.none )
+                    ( model, Channel.none )
 
-                Just island_ ->
-                    case data.requestedPlacement of
-                        Nothing ->
-                            ( model, Cmd.none )
-
-                        Just ( requestedIsland, coordinate ) ->
-                            if island_ == requestedIsland && Coordinate row col == coordinate then
-                                ( { model
-                                    | page =
-                                        PlayersSet (addToPlacedIslands island_ row col data)
-                                  }
-                                , Cmd.none
-                                )
-
-                            else
-                                ( model, Cmd.none )
-
-        ( ReceivedFailedPositioningIsland { island, row, col }, PlayersSet data ) ->
-            case islandFromString island of
-                Nothing ->
-                    ( model, Cmd.none )
-
-                Just island_ ->
-                    case data.requestedPlacement of
-                        Nothing ->
-                            ( model, Cmd.none )
-
-                        Just ( requestedIsland, coordinate ) ->
-                            if island_ == requestedIsland && Coordinate row col == coordinate then
+                Just ( requestedIsland, coordinate ) ->
+                    if island == requestedIsland && Coordinate row col == coordinate then
+                        case result of
+                            Err _ ->
                                 ( { model
                                     | page =
                                         PlayersSet
@@ -516,47 +580,83 @@ update msg model =
                                                 , requestedPlacement = Nothing
                                             }
                                   }
-                                , Cmd.none
+                                , Channel.none
                                 )
 
-                            else
-                                ( model, Cmd.none )
+                            Ok () ->
+                                ( { model
+                                    | page = PlayersSet (addToPlacedIslands island row col data)
+                                  }
+                                , Channel.none
+                                )
 
-        ( ReceivedOpponentSetIslands (), PlayersSet data ) ->
-            ( { model | page = PlayersSet { data | opponentReady = True } }
-            , Cmd.none
-            )
+                    else
+                        ( model, Channel.none )
+
+        ( ReceivedPlayerSetIslands value, PlayersSet data ) ->
+            if opponentSetIslands data.player value then
+                ( { model | page = PlayersSet { data | opponentReady = True } }
+                , Channel.none
+                )
+
+            else
+                ( model, Channel.none )
 
         ( UserPressedImReady, PlayersSet data ) ->
             if data.opponentReady then
-                ( { model | page = Playing (initPlaying data.player data.placedIslands) }
-                , setIslands ()
+                ( { model
+                    | page =
+                        Playing
+                            (initPlaying data.channel
+                                data.player
+                                data.placedIslands
+                            )
+                  }
+                , Channel.push ReceivedSetIslandResult
+                    (Decode.succeed ())
+                    data.channel
+                    "set_islands"
+                    (Encode.string (playerToString data.player))
                 )
 
             else
                 ( { model
                     | page =
                         WaitingForOpponent
-                            { player = data.player
+                            { channel = data.channel
+                            , player = data.player
                             , placedIslands = data.placedIslands
                             }
                   }
-                , setIslands ()
+                , Channel.push ReceivedSetIslandResult
+                    (Decode.succeed ())
+                    data.channel
+                    "set_islands"
+                    (Encode.string (playerToString data.player))
                 )
 
         ( _, PlayersSet _ ) ->
-            ( model, Cmd.none )
+            ( model, Channel.none )
 
-        ( ReceivedBoard (), WaitingForOpponent _ ) ->
-            ( model, Cmd.none )
+        -- WAITING FOR OPPONENT
+        ( ReceivedPlayerSetIslands value, WaitingForOpponent data ) ->
+            if opponentSetIslands data.player value then
+                ( { model
+                    | page =
+                        Playing
+                            (initPlaying data.channel
+                                data.player
+                                data.placedIslands
+                            )
+                  }
+                , Channel.none
+                )
 
-        ( ReceivedOpponentSetIslands (), WaitingForOpponent data ) ->
-            ( { model | page = Playing (initPlaying data.player data.placedIslands) }
-            , Cmd.none
-            )
+            else
+                ( model, Channel.none )
 
         ( _, WaitingForOpponent _ ) ->
-            ( model, Cmd.none )
+            ( model, Channel.none )
 
         -- PLAYING
         ( _, Playing data ) ->
@@ -569,9 +669,10 @@ update msg model =
             )
 
 
-initPlayersSet : Player -> PlayersSetData
-initPlayersSet player =
-    { player = player
+initPlayersSet : Channel -> Player -> PlayersSetData
+initPlayersSet channel player =
+    { channel = channel
+    , player = player
     , placedIslands = []
     , unplacedIslands = allIslands
     , selection = None
@@ -585,7 +686,7 @@ requestPositionIsland :
     -> Island
     -> Coordinate
     -> PlayersSetData
-    -> ( PlayersSetData, Cmd Msg )
+    -> ( PlayersSetData, Effect Msg )
 requestPositionIsland coordinate island offset data =
     let
         requestedCoordinate =
@@ -597,12 +698,32 @@ requestPositionIsland coordinate island offset data =
         | selection = None
         , requestedPlacement = Just ( island, requestedCoordinate )
       }
-    , positionIsland
-        { island = islandToString island
-        , row = requestedCoordinate.row
-        , col = requestedCoordinate.col
-        }
+    , Channel.push
+        (ReceivedPositionIslandResult island
+            requestedCoordinate.row
+            requestedCoordinate.col
+        )
+        (Decode.succeed ())
+        data.channel
+        "position_island"
+        (Encode.object
+            [ ( "player", Encode.string (playerToString data.player) )
+            , ( "island", Encode.string (islandToString island) )
+            , ( "row", Encode.int requestedCoordinate.row )
+            , ( "col", Encode.int requestedCoordinate.col )
+            ]
+        )
     )
+
+
+opponentSetIslands : Player -> Value -> Bool
+opponentSetIslands player value =
+    case Decode.decodeValue playerSetIslandDecoder value of
+        Err _ ->
+            False
+
+        Ok opponent ->
+            opponent /= player
 
 
 addToPlacedIslands : Island -> Int -> Int -> PlayersSetData -> PlayersSetData
@@ -624,9 +745,10 @@ addToPlacedIslands island row col data =
     }
 
 
-initPlaying : Player -> List ( Island, Coordinate ) -> PlayingData
-initPlaying player placedIslands =
-    { player = player
+initPlaying : Channel -> Player -> List ( Island, Coordinate ) -> PlayingData
+initPlaying channel player placedIslands =
+    { channel = channel
+    , player = player
     , state =
         case player of
             Host ->
@@ -641,119 +763,150 @@ initPlaying player placedIslands =
     }
 
 
-updatePlaying : Msg -> PlayingData -> ( PlayingData, Cmd Msg )
+updatePlaying : Msg -> PlayingData -> ( PlayingData, Effect Msg )
 updatePlaying msg data =
     case msg of
         UserPressedOpponentTile coordinate ->
             case data.state of
                 Guessing ->
                     ( { data | state = Guessed coordinate }
-                    , guessCoordinate
-                        { player = playerToString data.player
-                        , row = coordinate.row
-                        , col = coordinate.col
-                        }
+                    , Channel.push ReceivedGuessCoordinateResult
+                        (Decode.succeed ())
+                        data.channel
+                        "guess_coordinate"
+                        (Encode.object
+                            [ ( "player", Encode.string (playerToString data.player) )
+                            , ( "row", Encode.int coordinate.row )
+                            , ( "col", Encode.int coordinate.col )
+                            ]
+                        )
                     )
 
                 _ ->
-                    ( data, Cmd.none )
+                    ( data, Channel.none )
 
-        ReceivedFailedGuessingCoordinate () ->
-            ( data, Cmd.none )
+        ReceivedGuessCoordinateResult _ ->
+            ( data, Channel.none )
 
-        ReceivedPlayerGuessedCoordinate { player, row, col, result } ->
-            case ( data.state, playerFromString player ) of
-                ( Guessed coordinate, Just guessingPlayer ) ->
-                    if guessingPlayer == data.player && Coordinate row col == coordinate then
-                        ( { data
-                            | state =
-                                if result.win == "win" then
-                                    Won
+        ReceivedPlayerGuessedCoordinate value ->
+            case Decode.decodeValue guessedCoordinateDecoder value of
+                Err _ ->
+                    ( data, Channel.none )
 
-                                else
-                                    OpponentGuessing
-                            , opponentTiles =
-                                ( coordinate, result.hit ) :: data.opponentTiles
-                            , forestedIslands =
-                                case islandFromString result.island of
-                                    Nothing ->
-                                        data.forestedIslands
+                Ok { player, row, col, result } ->
+                    case ( data.state, playerFromString player ) of
+                        ( Guessed coordinate, Just guessingPlayer ) ->
+                            if guessingPlayer == data.player && Coordinate row col == coordinate then
+                                ( { data
+                                    | state =
+                                        if result.win == "win" then
+                                            Won
 
-                                    Just island ->
-                                        island :: data.forestedIslands
-                          }
-                        , Cmd.none
-                        )
+                                        else
+                                            OpponentGuessing
+                                    , opponentTiles =
+                                        ( coordinate, result.hit ) :: data.opponentTiles
+                                    , forestedIslands =
+                                        case islandFromString result.island of
+                                            Nothing ->
+                                                data.forestedIslands
 
-                    else
-                        ( data, Cmd.none )
+                                            Just island ->
+                                                island :: data.forestedIslands
+                                  }
+                                , Channel.none
+                                )
 
-                ( OpponentGuessing, Just guessingPlayer ) ->
-                    if guessingPlayer /= data.player then
-                        ( { data
-                            | state =
-                                if result.win == "win" then
-                                    OpponentWon
+                            else
+                                ( data, Channel.none )
 
-                                else
-                                    Guessing
-                            , opponentGuesses = Coordinate row col :: data.opponentGuesses
-                          }
-                        , Cmd.none
-                        )
+                        ( OpponentGuessing, Just guessingPlayer ) ->
+                            if guessingPlayer /= data.player then
+                                ( { data
+                                    | state =
+                                        if result.win == "win" then
+                                            OpponentWon
 
-                    else
-                        ( data, Cmd.none )
+                                        else
+                                            Guessing
+                                    , opponentGuesses = Coordinate row col :: data.opponentGuesses
+                                  }
+                                , Channel.none
+                                )
 
-                _ ->
-                    ( data, Cmd.none )
+                            else
+                                ( data, Channel.none )
+
+                        _ ->
+                            ( data, Channel.none )
 
         _ ->
-            ( data, Cmd.none )
+            ( data, Channel.none )
+
+
+playerSetIslandDecoder : Decoder Player
+playerSetIslandDecoder =
+    Decode.field "player" Decode.string
+        |> Decode.andThen
+            (\rawPlayer ->
+                case playerFromString rawPlayer of
+                    Nothing ->
+                        Decode.fail ("not a valid player: " ++ rawPlayer)
+
+                    Just player ->
+                        Decode.succeed player
+            )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Sub.batch
-        [ Browser.Events.onResize ResizedViewport
-        , case model.page of
-            Lobby _ ->
-                Sub.none
+subscriptions _ =
+    Browser.Events.onResize ResizedViewport
 
-            WaitingForGuest _ ->
-                playerAdded ReceivedPlayerAdded
 
-            JoiningHost _ ->
-                playerAdded ReceivedPlayerAdded
+eventSubscriptions : Model -> List (Channel.EventSub Msg)
+eventSubscriptions model =
+    case model.page of
+        CreatingGame data ->
+            case data.channel of
+                Received channel ->
+                    [ Channel.on channel "player_added" ReceivedPlayerAdded ]
 
-            PlayersSet _ ->
-                Sub.batch
-                    [ positionedIsland ReceivedPositionedIsland
-                    , failedPositioningIsland ReceivedFailedPositioningIsland
-                    , opponentSetIslands ReceivedOpponentSetIslands
-                    , receivedBoard ReceivedBoard
+                _ ->
+                    []
+
+        WaitingForGuest { channel } ->
+            [ Channel.on channel "player_added" ReceivedPlayerAdded ]
+
+        JoiningGame data ->
+            case data.channel of
+                Received channel ->
+                    [ Channel.on channel "player_added" ReceivedPlayerAdded ]
+
+                _ ->
+                    []
+
+        PlayersSet { channel } ->
+            [ Channel.on channel "player_set_islands" ReceivedPlayerSetIslands ]
+
+        WaitingForOpponent { channel } ->
+            [ Channel.on channel "player_set_islands" ReceivedPlayerSetIslands ]
+
+        Playing data ->
+            case data.state of
+                Guessed _ ->
+                    [ Channel.on data.channel
+                        "player_guessed_coordinate"
+                        ReceivedPlayerGuessedCoordinate
                     ]
 
-            WaitingForOpponent _ ->
-                opponentSetIslands ReceivedOpponentSetIslands
+                OpponentGuessing ->
+                    [ Channel.on data.channel
+                        "player_guessed_coordinate"
+                        ReceivedPlayerGuessedCoordinate
+                    ]
 
-            Playing data ->
-                case data.state of
-                    Guessed _ ->
-                        Sub.batch
-                            [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
-                            , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
-                            ]
-
-                    OpponentGuessing ->
-                        Sub.batch
-                            [ failedGuessingCoordinate ReceivedFailedGuessingCoordinate
-                            , playerGuessedCoordinate ReceivedPlayerGuessedCoordinate
-                            ]
-
-                    _ ->
-                        Sub.none
-        ]
+                _ ->
+                    []
 
 
 
@@ -790,13 +943,24 @@ view model =
             , Font.size 24
             ]
             (case model.page of
-                Lobby { name } ->
-                    viewLobby name
+                CreatingGame data ->
+                    case data.channel of
+                        NotAsked ->
+                            viewLobby data.name
+
+                        Requesting ->
+                            viewWaitingForGuest data.host data.name
+
+                        Received _ ->
+                            viewWaitingForGuest data.host data.name
+
+                        RequestFailed ->
+                            Element.text "Request failed"
 
                 WaitingForGuest { host, name } ->
                     viewWaitingForGuest host name
 
-                JoiningHost { hostName, name } ->
+                JoiningGame { hostName, name } ->
                     viewJoiningHost hostName name
 
                 PlayersSet { placedIslands, unplacedIslands, selection, opponentReady } ->
