@@ -605,39 +605,25 @@ update msg model =
                 ( model, Channel.none )
 
         ( UserPressedImReady, PlayersSet data ) ->
-            if data.opponentReady then
-                ( { model
-                    | page =
-                        Playing
-                            (initPlaying data.channel
-                                data.player
-                                data.placedIslands
-                            )
-                  }
-                , Channel.push
-                    { channel = data.channel
-                    , event = "set_islands"
-                    , expect = Channel.expectWhatever ReceivedSetIslandResult
-                    , payload = Encode.string (playerToString data.player)
-                    }
-                )
+            ( { model
+                | page =
+                    if data.opponentReady then
+                        Playing (initPlaying data.channel data.player data.placedIslands)
 
-            else
-                ( { model
-                    | page =
+                    else
                         WaitingForOpponent
                             { channel = data.channel
                             , player = data.player
                             , placedIslands = data.placedIslands
                             }
-                  }
-                , Channel.push
-                    { channel = data.channel
-                    , event = "set_islands"
-                    , expect = Channel.expectWhatever ReceivedSetIslandResult
-                    , payload = Encode.string (playerToString data.player)
-                    }
-                )
+              }
+            , Channel.push
+                { channel = data.channel
+                , event = "set_islands"
+                , expect = Channel.expectWhatever ReceivedSetIslandResult
+                , payload = Encode.string (playerToString data.player)
+                }
+            )
 
         ( _, PlayersSet _ ) ->
             ( model, Channel.none )
