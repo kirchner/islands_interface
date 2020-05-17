@@ -1,5 +1,6 @@
 module Channel exposing
     ( Effect, none, cmd, join, push
+    , Expect, expectWhatever, expectJson
     , EventSub, on
     , Error, Channel
     , document
@@ -9,6 +10,7 @@ module Channel exposing
 {-|
 
 @docs Effect, none, cmd, join, push
+@docs Expect, expectWhatever, expectJson
 @docs EventSub, on
 @docs Error, Channel
 @docs document
@@ -70,23 +72,56 @@ join onResult =
 
 
 {-| -}
-push : (Result Error a -> msg) -> Decoder a -> Channel -> String -> Value -> Effect msg
-push onResult aDecoder =
-    Push
-        (\result ->
-            onResult <|
-                case result of
-                    Err value ->
-                        Err (ChannelError value)
+push :
+    { channel : Channel
+    , event : String
+    , payload : Value
+    , expect : Expect msg
+    }
+    -> Effect msg
+push config =
+    let
+        (Expect toMsg) =
+            config.expect
+    in
+    Push toMsg config.channel config.event config.payload
 
-                    Ok value ->
-                        case Decode.decodeValue aDecoder value of
-                            Err decodeError ->
-                                Err (BadBody decodeError)
 
-                            Ok a ->
-                                Ok a
-        )
+type Expect msg
+    = Expect (Result Value Value -> msg)
+
+
+expectWhatever : (Result Error () -> msg) -> Expect msg
+expectWhatever toMsg =
+    let
+        onResult result =
+            case result of
+                Err value ->
+                    Err (ChannelError value)
+
+                Ok _ ->
+                    Ok ()
+    in
+    Expect (toMsg << onResult)
+
+
+expectJson : (Result Error a -> msg) -> Decoder a -> Expect msg
+expectJson toMsg aDecoder =
+    let
+        onResult result =
+            case result of
+                Err value ->
+                    Err (ChannelError value)
+
+                Ok value ->
+                    case Decode.decodeValue aDecoder value of
+                        Err decodeError ->
+                            Err (BadBody decodeError)
+
+                        Ok a ->
+                            Ok a
+    in
+    Expect (toMsg << onResult)
 
 
 {-| -}

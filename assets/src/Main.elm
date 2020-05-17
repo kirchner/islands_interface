@@ -428,11 +428,12 @@ update msg model =
                                 , channel = Received channel
                                 }
                       }
-                    , Channel.push ReceivedNewGameResponse
-                        (Decode.succeed ())
-                        channel
-                        "new_game"
-                        Encode.null
+                    , Channel.push
+                        { channel = channel
+                        , event = "new_game"
+                        , expect = Channel.expectWhatever ReceivedNewGameResponse
+                        , payload = Encode.null
+                        }
                     )
 
         ( ReceivedNewGameResponse result, CreatingGame data ) ->
@@ -497,11 +498,12 @@ update msg model =
 
                 Ok ( channel, _ ) ->
                     ( { model | page = JoiningGame { data | channel = Received channel } }
-                    , Channel.push ReceivedAddPlayerResult
-                        (Decode.succeed ())
-                        channel
-                        "add_player"
-                        (Encode.string data.name)
+                    , Channel.push
+                        { channel = channel
+                        , event = "add_player"
+                        , expect = Channel.expectWhatever ReceivedAddPlayerResult
+                        , payload = Encode.string data.name
+                        }
                     )
 
         ( ReceivedAddPlayerResult _, JoiningGame _ ) ->
@@ -612,11 +614,12 @@ update msg model =
                                 data.placedIslands
                             )
                   }
-                , Channel.push ReceivedSetIslandResult
-                    (Decode.succeed ())
-                    data.channel
-                    "set_islands"
-                    (Encode.string (playerToString data.player))
+                , Channel.push
+                    { channel = data.channel
+                    , event = "set_islands"
+                    , expect = Channel.expectWhatever ReceivedSetIslandResult
+                    , payload = Encode.string (playerToString data.player)
+                    }
                 )
 
             else
@@ -628,11 +631,12 @@ update msg model =
                             , placedIslands = data.placedIslands
                             }
                   }
-                , Channel.push ReceivedSetIslandResult
-                    (Decode.succeed ())
-                    data.channel
-                    "set_islands"
-                    (Encode.string (playerToString data.player))
+                , Channel.push
+                    { channel = data.channel
+                    , event = "set_islands"
+                    , expect = Channel.expectWhatever ReceivedSetIslandResult
+                    , payload = Encode.string (playerToString data.player)
+                    }
                 )
 
         ( _, PlayersSet _ ) ->
@@ -699,20 +703,22 @@ requestPositionIsland coordinate island offset data =
         , requestedPlacement = Just ( island, requestedCoordinate )
       }
     , Channel.push
-        (ReceivedPositionIslandResult island
-            requestedCoordinate.row
-            requestedCoordinate.col
-        )
-        (Decode.succeed ())
-        data.channel
-        "position_island"
-        (Encode.object
-            [ ( "player", Encode.string (playerToString data.player) )
-            , ( "island", Encode.string (islandToString island) )
-            , ( "row", Encode.int requestedCoordinate.row )
-            , ( "col", Encode.int requestedCoordinate.col )
-            ]
-        )
+        { channel = data.channel
+        , event = "position_island"
+        , expect =
+            Channel.expectWhatever
+                (ReceivedPositionIslandResult island
+                    requestedCoordinate.row
+                    requestedCoordinate.col
+                )
+        , payload =
+            Encode.object
+                [ ( "player", Encode.string (playerToString data.player) )
+                , ( "island", Encode.string (islandToString island) )
+                , ( "row", Encode.int requestedCoordinate.row )
+                , ( "col", Encode.int requestedCoordinate.col )
+                ]
+        }
     )
 
 
@@ -770,16 +776,17 @@ updatePlaying msg data =
             case data.state of
                 Guessing ->
                     ( { data | state = Guessed coordinate }
-                    , Channel.push ReceivedGuessCoordinateResult
-                        (Decode.succeed ())
-                        data.channel
-                        "guess_coordinate"
-                        (Encode.object
-                            [ ( "player", Encode.string (playerToString data.player) )
-                            , ( "row", Encode.int coordinate.row )
-                            , ( "col", Encode.int coordinate.col )
-                            ]
-                        )
+                    , Channel.push
+                        { channel = data.channel
+                        , event = "guess_coordinate"
+                        , expect = Channel.expectWhatever ReceivedGuessCoordinateResult
+                        , payload =
+                            Encode.object
+                                [ ( "player", Encode.string (playerToString data.player) )
+                                , ( "row", Encode.int coordinate.row )
+                                , ( "col", Encode.int coordinate.col )
+                                ]
+                        }
                     )
 
                 _ ->
